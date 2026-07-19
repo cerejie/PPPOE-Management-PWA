@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { fieldClass, labelClass, primaryButtonClass } from '@/components/formStyles';
 import { useAuth } from './AuthContext';
 
 export function LoginScreen() {
@@ -19,19 +20,19 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col justify-center bg-slate-50 px-6 pb-safe-bottom pt-safe-top">
+    <div className="flex min-h-dvh flex-col justify-center bg-canvas px-6 pb-safe-bottom pt-safe-top">
       <div className="mx-auto w-full max-w-app">
         <div className="mb-10 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-accent text-3xl text-white">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-accent-gradient text-3xl shadow-float">
             📶
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">PPPoE Manager</h1>
-          <p className="mt-1 text-sm text-muted">Sign in to continue</p>
+          <h1 className="text-3xl font-bold tracking-tight text-fg">PPPoE Manager</h1>
+          <p className="mt-1.5 text-sm text-muted">Sign in to continue</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="identifier" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="identifier" className={labelClass}>
               Username or email
             </label>
             <input
@@ -43,13 +44,13 @@ export function LoginScreen() {
               required
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className={fieldClass}
               placeholder="username"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">
+            <label htmlFor="password" className={labelClass}>
               Password
             </label>
             <input
@@ -59,27 +60,23 @@ export function LoginScreen() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
+              className={fieldClass}
               placeholder="••••••••"
             />
           </div>
 
           {error && (
-            <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-danger">
+            <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="min-h-[48px] w-full rounded-xl bg-accent px-4 py-3 text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
-          >
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-muted">
+        <p className="mt-8 text-center text-xs text-muted">
           Staff sign in with their username. Admin signs in with email.
         </p>
       </div>

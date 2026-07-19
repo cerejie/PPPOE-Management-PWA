@@ -1,13 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Screen } from '@/components/Screen';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import {
+  dangerButtonClass,
+  fieldClass,
+  labelClass,
+  primaryButtonClass,
+} from '@/components/formStyles';
+import { isPlanOfferable } from '@/features/plans/actions';
 import { useOnline } from '@/features/sync/useSyncStatus';
 import type { AccountStatus } from '@/lib/types';
 import { createClient, softDeleteClient, updateClient, type ClientInput } from './actions';
 import { useClient, usePlans, useRooms, useRouters } from './hooks';
-
-const inputClass =
-  'mt-1 block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30';
 
 const ACCOUNT_STATUSES: AccountStatus[] = ['active', 'suspended', 'terminated'];
 
@@ -35,6 +40,7 @@ export function ClientFormScreen() {
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (existing) {
@@ -50,6 +56,13 @@ export function ClientFormScreen() {
       });
     }
   }, [existing]);
+
+  // Retired plans stay listed for the client already on them, so editing an
+  // unrelated field can't silently drop their plan.
+  const selectablePlans = useMemo(
+    () => (plans ?? []).filter((p) => isPlanOfferable(p) || p.id === form.plan_id),
+    [plans, form.plan_id],
+  );
 
   function set<K extends keyof ClientInput>(key: K, value: ClientInput[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -71,10 +84,10 @@ export function ClientFormScreen() {
 
   async function handleDelete() {
     if (!id) return;
-    if (!window.confirm('Remove this client? They will be hidden but history is kept.')) return;
     setBusy(true);
     const err = await softDeleteClient(id);
     setBusy(false);
+    setConfirmingDelete(false);
     if (err) {
       setError(err);
       return;
@@ -93,139 +106,169 @@ export function ClientFormScreen() {
   }
 
   return (
-    <Screen title={isEdit ? 'Edit client' : 'New client'} back>
-      {!online && (
-        <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-warn">
-          Client editing needs a connection. Go online and try again.
-        </p>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="full_name" className="text-sm font-medium text-slate-700">Full name</label>
-          <input
-            id="full_name"
-            type="text"
-            required
-            value={form.full_name}
-            onChange={(e) => set('full_name', e.target.value)}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="pppoe_username" className="text-sm font-medium text-slate-700">PPPoE username</label>
-          <input
-            id="pppoe_username"
-            type="text"
-            required
-            autoCapitalize="none"
-            autoCorrect="off"
-            value={form.pppoe_username}
-            onChange={(e) => set('pppoe_username', e.target.value.trim())}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="room" className="text-sm font-medium text-slate-700">Room</label>
-          <select
-            id="room"
-            value={form.room_id ?? ''}
-            onChange={(e) => {
-              const roomId = e.target.value || null;
-              const roomRouter = routers?.find((r) => r.room_id === roomId);
-              setForm((f) => ({ ...f, room_id: roomId, router_id: roomRouter?.id ?? null }));
-            }}
-            className={inputClass}
-          >
-            <option value="">No room</option>
-            {(rooms ?? []).map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="plan" className="text-sm font-medium text-slate-700">Plan</label>
-          <select
-            id="plan"
-            value={form.plan_id ?? ''}
-            onChange={(e) => handlePlanChange(e.target.value)}
-            className={inputClass}
-          >
-            <option value="">No plan</option>
-            {(plans ?? []).map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} — ₱{p.price} / {p.duration_days}d
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="monthly_fee" className="text-sm font-medium text-slate-700">Monthly fee</label>
-          <input
-            id="monthly_fee"
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            required
-            value={form.monthly_fee}
-            onChange={(e) => set('monthly_fee', Number(e.target.value))}
-            className={inputClass}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="account_status" className="text-sm font-medium text-slate-700">Account status</label>
-          <select
-            id="account_status"
-            value={form.account_status}
-            onChange={(e) => set('account_status', e.target.value as AccountStatus)}
-            className={inputClass}
-          >
-            {ACCOUNT_STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label htmlFor="notes" className="text-sm font-medium text-slate-700">Notes</label>
-          <textarea
-            id="notes"
-            rows={3}
-            value={form.notes ?? ''}
-            onChange={(e) => set('notes', e.target.value || null)}
-            className={inputClass}
-          />
-        </div>
-
-        {error && (
-          <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-danger">{error}</p>
+    <>
+      <Screen title={isEdit ? 'Edit client' : 'New client'} back>
+        {!online && (
+          <p className="mb-4 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
+            Client editing needs a connection. Go online and try again.
+          </p>
         )}
 
-        <button
-          type="submit"
-          disabled={busy || !online}
-          className="min-h-[48px] w-full rounded-xl bg-accent px-4 py-3 font-semibold text-white active:opacity-80 disabled:opacity-50"
-        >
-          {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add client'}
-        </button>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="full_name" className={labelClass}>
+              Full name
+            </label>
+            <input
+              id="full_name"
+              type="text"
+              required
+              value={form.full_name}
+              onChange={(e) => set('full_name', e.target.value)}
+              className={fieldClass}
+            />
+          </div>
 
-        {isEdit && (
-          <button
-            type="button"
-            disabled={busy || !online}
-            onClick={() => void handleDelete()}
-            className="min-h-[48px] w-full rounded-xl bg-red-50 px-4 py-3 font-semibold text-danger active:opacity-70 disabled:opacity-50"
-          >
-            Remove client
+          <div>
+            <label htmlFor="pppoe_username" className={labelClass}>
+              PPPoE username
+            </label>
+            <input
+              id="pppoe_username"
+              type="text"
+              required
+              autoCapitalize="none"
+              autoCorrect="off"
+              value={form.pppoe_username}
+              onChange={(e) => set('pppoe_username', e.target.value.trim())}
+              className={fieldClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="room" className={labelClass}>
+              Room
+            </label>
+            <select
+              id="room"
+              value={form.room_id ?? ''}
+              onChange={(e) => {
+                const roomId = e.target.value || null;
+                const roomRouter = routers?.find((r) => r.room_id === roomId);
+                setForm((f) => ({ ...f, room_id: roomId, router_id: roomRouter?.id ?? null }));
+              }}
+              className={fieldClass}
+            >
+              <option value="">No room</option>
+              {(rooms ?? []).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="plan" className={labelClass}>
+              Plan
+            </label>
+            <select
+              id="plan"
+              value={form.plan_id ?? ''}
+              onChange={(e) => handlePlanChange(e.target.value)}
+              className={fieldClass}
+            >
+              <option value="">No plan</option>
+              {selectablePlans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — ₱{p.price}
+                  {p.mbps > 0 ? ` · ${p.mbps} Mbps` : ''} · {p.duration_days}d
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="monthly_fee" className={labelClass}>
+              Monthly fee
+            </label>
+            <input
+              id="monthly_fee"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              required
+              value={form.monthly_fee}
+              onChange={(e) => set('monthly_fee', Number(e.target.value))}
+              className={fieldClass}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="account_status" className={labelClass}>
+              Account status
+            </label>
+            <select
+              id="account_status"
+              value={form.account_status}
+              onChange={(e) => set('account_status', e.target.value as AccountStatus)}
+              className={`${fieldClass} capitalize`}
+            >
+              {ACCOUNT_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="notes" className={labelClass}>
+              Notes <span className="font-normal text-muted/70">(optional)</span>
+            </label>
+            <textarea
+              id="notes"
+              rows={3}
+              value={form.notes ?? ''}
+              onChange={(e) => set('notes', e.target.value || null)}
+              className={fieldClass}
+            />
+          </div>
+
+          {error && (
+            <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
+              {error}
+            </p>
+          )}
+
+          <button type="submit" disabled={busy || !online} className={primaryButtonClass}>
+            {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add client'}
           </button>
-        )}
-      </form>
-    </Screen>
+
+          {isEdit && (
+            <button
+              type="button"
+              disabled={busy || !online}
+              onClick={() => setConfirmingDelete(true)}
+              className={dangerButtonClass}
+            >
+              Remove client
+            </button>
+          )}
+        </form>
+      </Screen>
+
+      {confirmingDelete && (
+        <ConfirmDialog
+          title="Remove client?"
+          message="They will be hidden from the app, but their payment and connection history is kept."
+          confirmLabel="Remove"
+          busy={busy}
+          onConfirm={() => void handleDelete()}
+          onCancel={() => setConfirmingDelete(false)}
+        />
+      )}
+    </>
   );
 }

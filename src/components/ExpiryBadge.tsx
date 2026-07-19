@@ -5,22 +5,24 @@ export function ExpiryBadge({ expiresAt }: { expiresAt: string | null }) {
   const days = daysUntil(expiresAt);
 
   if (days === null) {
-    return <span className="text-xs text-muted">no expiry</span>;
+    return <span className="shrink-0 text-xs text-muted">no expiry</span>;
   }
 
-  let cls = 'bg-emerald-50 text-ok';
+  let cls = 'bg-ok-soft text-ok';
   let text = `${days}d left`;
   if (days < 0) {
-    cls = 'bg-red-50 text-danger';
+    cls = 'bg-danger-soft text-danger';
     text = `expired ${Math.abs(days)}d`;
   } else if (days === 0) {
-    cls = 'bg-red-50 text-danger';
+    cls = 'bg-danger-soft text-danger';
     text = 'expires today';
   } else if (days <= 7) {
-    cls = 'bg-amber-50 text-warn';
+    cls = 'bg-warn-soft text-warn';
   }
 
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{text}</span>
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${cls}`}>
+      {text}
+    </span>
   );
 }

@@ -16,5 +16,4 @@ dist-ssr
 supabase/.branches
 supabase/.temp
 
-
-graphify-out
+graphigy

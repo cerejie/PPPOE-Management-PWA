@@ -7,6 +7,7 @@ import { ClientsScreen } from '@/features/clients/ClientsScreen';
 import { ClientDetailScreen } from '@/features/clients/ClientDetailScreen';
 import { ClientFormScreen } from '@/features/clients/ClientFormScreen';
 import { RoomsScreen } from '@/features/rooms/RoomsScreen';
+import { PlansScreen } from '@/features/plans/PlansScreen';
 import { SyncScreen } from '@/features/sync/SyncScreen';
 import { useBackgroundSync } from '@/features/sync/useSyncStatus';
 import { TabBar } from '@/components/TabBar';
@@ -31,7 +32,7 @@ export function App() {
 
   if (loading) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-slate-50">
+      <div className="flex min-h-dvh items-center justify-center bg-canvas">
         <p className="text-sm text-muted">Loading…</p>
       </div>
     );
@@ -48,6 +49,7 @@ export function App() {
         <Route path="/clients" element={<ClientsScreen />} />
         <Route path="/clients/:id" element={<ClientDetailScreen />} />
         <Route path="/rooms" element={<RoomsScreen />} />
+        <Route path="/plans" element={<PlansScreen />} />
         <Route path="/settings" element={<SettingsScreen />} />
         <Route path="/sync" element={<SyncScreen />} />
         <Route element={<SuperAdminOnly />}>

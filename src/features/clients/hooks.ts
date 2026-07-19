@@ -78,9 +78,16 @@ export function useRouters(): Router[] | undefined {
 
 export function usePlans(): Plan[] | undefined {
   return useLiveQuery(
-    async () => (await db.plans.toArray()).sort((a, b) => a.price - b.price),
+    async () =>
+      (await db.plans.toArray())
+        .filter((p) => !p.deleted_at)
+        .sort((a, b) => a.price - b.price),
     [],
   );
+}
+
+export function useRoom(id: string | undefined): Room | undefined {
+  return useLiveQuery(async () => (id ? await db.rooms.get(id) : undefined), [id]);
 }
 
 export function useClientPayments(clientId: string | undefined): Payment[] | undefined {
@@ -113,6 +120,9 @@ export function useClientOutbox(clientId: string | undefined): OutboxItem[] | un
 }
 
 export interface DashboardStats {
+  total: number;
+  /** Sum of monthly_fee across clients whose account_status is 'active'. */
+  monthlyRevenue: number;
   connected: number;
   disconnected: number;
   expiring7d: number;
@@ -128,10 +138,12 @@ export function useDashboardStats(): DashboardStats | undefined {
     let disconnected = 0;
     let expiring7d = 0;
     let expired = 0;
+    let monthlyRevenue = 0;
 
     for (const c of clients) {
       if (c.connection_status === 'connected') connected += 1;
       else disconnected += 1;
+      if (c.account_status === 'active') monthlyRevenue += c.monthly_fee;
       const d = daysUntil(c.expires_at);
       if (d !== null) {
         if (d < 0) expired += 1;
@@ -144,6 +156,14 @@ export function useDashboardStats(): DashboardStats | undefined {
       .sort((a, b) => (a.expires_at ?? '').localeCompare(b.expires_at ?? ''))
       .slice(0, 8);
 
-    return { connected, disconnected, expiring7d, expired, soonest };
+    return {
+      total: clients.length,
+      monthlyRevenue,
+      connected,
+      disconnected,
+      expiring7d,
+      expired,
+      soonest,
+    };
   }, []);
 }

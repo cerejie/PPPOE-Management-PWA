@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Screen } from '@/components/Screen';
+import { Fab } from '@/components/Fab';
 import { StatusDot } from '@/components/StatusDot';
 import { ExpiryBadge } from '@/components/ExpiryBadge';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -25,8 +26,9 @@ function FilterChip({ active, onClick, children }: ChipProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-[36px] shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium ${
-        active ? 'bg-accent text-white' : 'bg-white text-slate-600 shadow-sm'
+      aria-pressed={active}
+      className={`min-h-[38px] shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+        active ? 'bg-accent-gradient text-white shadow-float' : 'bg-surface text-muted shadow-card'
       } active:opacity-70`}
     >
       {children}
@@ -64,110 +66,124 @@ export function ClientsScreen() {
     filters.roomId !== 'all' ? rooms?.find((r) => r.id === filters.roomId)?.name : undefined;
 
   return (
-    <Screen
-      title="Clients"
-      action={
-        isSuperAdmin ? (
-          <button
-            type="button"
-            onClick={() => navigate('/clients/new')}
-            aria-label="Add client"
-            className="flex h-11 w-11 items-center justify-center rounded-full text-white active:opacity-60"
+    <>
+      <Screen title="Clients" eyebrow={clients ? `${clients.length} shown` : undefined}>
+        <div className="relative mb-3">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden
+            className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-            </svg>
-          </button>
-        ) : undefined
-      }
-    >
-      <input
-        type="search"
-        inputMode="search"
-        placeholder="Search name or PPPoE username"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="mb-3 block w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
-      />
-
-      <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        <FilterChip active={filters.status === 'all' && filters.expiry === 'all'} onClick={() => {
-          setParams(filters.roomId !== 'all' ? new URLSearchParams({ room: filters.roomId }) : new URLSearchParams(), { replace: true });
-        }}>
-          All
-        </FilterChip>
-        <FilterChip
-          active={filters.status === 'connected'}
-          onClick={() => setParam('status', filters.status === 'connected' ? null : 'connected')}
-        >
-          Connected
-        </FilterChip>
-        <FilterChip
-          active={filters.status === 'disconnected'}
-          onClick={() => setParam('status', filters.status === 'disconnected' ? null : 'disconnected')}
-        >
-          Disconnected
-        </FilterChip>
-        <FilterChip
-          active={filters.expiry === 'expiring'}
-          onClick={() => setParam('expiry', filters.expiry === 'expiring' ? null : 'expiring')}
-        >
-          Expiring 7d
-        </FilterChip>
-        <FilterChip
-          active={filters.expiry === 'expired'}
-          onClick={() => setParam('expiry', filters.expiry === 'expired' ? null : 'expired')}
-        >
-          Expired
-        </FilterChip>
-      </div>
-
-      {roomName && (
-        <div className="mb-3 flex items-center justify-between rounded-xl bg-accent-soft px-4 py-2.5">
-          <span className="text-sm font-medium text-accent-text">Room: {roomName}</span>
-          <button
-            type="button"
-            onClick={() => setParam('room', null)}
-            className="min-h-[36px] text-sm font-semibold text-accent-text active:opacity-60"
-          >
-            Clear
-          </button>
+            <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+            <path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+          <input
+            type="search"
+            inputMode="search"
+            placeholder="Search name or PPPoE username"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search clients"
+            className="block w-full rounded-2xl border border-line bg-surface py-3 pl-11 pr-4 text-base text-fg placeholder:text-muted/70 outline-none transition-colors focus:border-accent focus:ring-4 focus:ring-accent/15"
+          />
         </div>
-      )}
 
-      {clients === undefined ? (
-        <p className="py-16 text-center text-sm text-muted">Loading…</p>
-      ) : clients.length === 0 ? (
-        <p className="rounded-2xl bg-white p-8 text-center text-sm text-muted shadow-sm">
-          No clients match.
-        </p>
-      ) : (
-        <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-sm">
-          {clients.map((c) => {
-            const room = rooms?.find((r) => r.id === c.room_id);
-            return (
-              <li key={c.id}>
-                <Link
-                  to={`/clients/${c.id}`}
-                  className="flex min-h-[64px] items-center justify-between gap-3 px-4 py-3 active:bg-slate-50"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <StatusDot status={c.connection_status} />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">{c.full_name}</p>
-                      <p className="truncate text-xs text-muted">
-                        {c.pppoe_username}
-                        {room ? ` · ${room.name}` : ''}
-                      </p>
+        <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+          <FilterChip
+            active={filters.status === 'all' && filters.expiry === 'all'}
+            onClick={() => {
+              setParams(
+                filters.roomId !== 'all'
+                  ? new URLSearchParams({ room: filters.roomId })
+                  : new URLSearchParams(),
+                { replace: true },
+              );
+            }}
+          >
+            All
+          </FilterChip>
+          <FilterChip
+            active={filters.status === 'connected'}
+            onClick={() => setParam('status', filters.status === 'connected' ? null : 'connected')}
+          >
+            Connected
+          </FilterChip>
+          <FilterChip
+            active={filters.status === 'disconnected'}
+            onClick={() =>
+              setParam('status', filters.status === 'disconnected' ? null : 'disconnected')
+            }
+          >
+            Disconnected
+          </FilterChip>
+          <FilterChip
+            active={filters.expiry === 'expiring'}
+            onClick={() => setParam('expiry', filters.expiry === 'expiring' ? null : 'expiring')}
+          >
+            Expiring 7d
+          </FilterChip>
+          <FilterChip
+            active={filters.expiry === 'expired'}
+            onClick={() => setParam('expiry', filters.expiry === 'expired' ? null : 'expired')}
+          >
+            Expired
+          </FilterChip>
+        </div>
+
+        {roomName && (
+          <div className="mb-3 flex items-center justify-between rounded-2xl bg-accent-soft px-4 py-2.5">
+            <span className="text-sm font-semibold text-accent-text">Room: {roomName}</span>
+            <button
+              type="button"
+              onClick={() => setParam('room', null)}
+              className="min-h-[36px] text-sm font-semibold text-accent-text active:opacity-60"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {clients === undefined ? (
+          <p className="py-16 text-center text-sm text-muted">Loading…</p>
+        ) : clients.length === 0 ? (
+          <div className="rounded-3xl bg-surface p-10 text-center shadow-card">
+            <p className="text-3xl">🔍</p>
+            <p className="mt-3 font-semibold text-fg">No clients match</p>
+            <p className="mt-1 text-sm text-muted">Try clearing the filters or the search.</p>
+          </div>
+        ) : (
+          <ul className="space-y-2.5">
+            {clients.map((c) => {
+              const room = rooms?.find((r) => r.id === c.room_id);
+              return (
+                <li key={c.id}>
+                  <Link
+                    to={`/clients/${c.id}`}
+                    className="flex min-h-[72px] items-center justify-between gap-3 rounded-3xl bg-surface px-4 py-3 shadow-card transition-transform active:scale-[0.98]"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <StatusDot status={c.connection_status} />
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-fg">{c.full_name}</p>
+                        <p className="truncate text-xs text-muted">
+                          {c.pppoe_username}
+                          {room ? ` · ${room.name}` : ''}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <ExpiryBadge expiresAt={c.expires_at} />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Screen>
+                    <ExpiryBadge expiresAt={c.expires_at} />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Screen>
+
+      {isSuperAdmin && <Fab onClick={() => navigate('/clients/new')} label="Add client" />}
+    </>
   );
 }

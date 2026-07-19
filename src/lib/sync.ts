@@ -25,7 +25,7 @@ export async function pullAll(): Promise<boolean> {
         supabase.from('clients').select('*').is('deleted_at', null),
         supabase.from('rooms').select('*').is('deleted_at', null),
         supabase.from('routers').select('*').is('deleted_at', null),
-        supabase.from('plans').select('*'),
+        supabase.from('plans').select('*').is('deleted_at', null),
         supabase.from('payments').select('*').gte('paid_at', paymentsSince),
         supabase
           .from('connection_events')

@@ -1,209 +1,54 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/Screen';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { fieldClass, labelClass, secondaryButtonClass } from '@/components/formStyles';
 import { db } from '@/lib/db';
-import { formatMoney } from '@/lib/format';
 import { supabase } from '@/lib/supabase';
 import { pullAll } from '@/lib/sync';
-import { usePlans, useRooms, useRouters } from '@/features/clients/hooks';
 import { useOnline } from '@/features/sync/useSyncStatus';
 import { useAuth } from './AuthContext';
 
-const inputClass =
-  'block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-accent focus:ring-2 focus:ring-accent/30';
-
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
-      <h2 className="mb-3 text-sm font-semibold text-slate-700">{title}</h2>
+    <section className="mt-4 rounded-3xl bg-surface p-5 shadow-card">
+      <h2 className="mb-4 text-base font-bold tracking-tight text-fg">{title}</h2>
       {children}
     </section>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Plans
-// ---------------------------------------------------------------------------
-
-function PlansSection() {
-  const plans = usePlans();
-  const online = useOnline();
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [days, setDays] = useState('30');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    setError(null);
-    setBusy(true);
-    const { error: err } = await supabase.from('plans').insert({
-      name: name.trim(),
-      price: Number(price),
-      duration_days: Number(days),
-    });
-    setBusy(false);
-    if (err) {
-      setError(err.message);
-      return;
-    }
-    setName('');
-    setPrice('');
-    setDays('30');
-    await pullAll();
-  }
-
+/** Row that links out to one of the management tabs. */
+function ManageLink({ to, label, hint }: { to: string; label: string; hint: string }) {
+  const navigate = useNavigate();
   return (
-    <SectionCard title="Plans">
-      {(plans ?? []).length > 0 && (
-        <ul className="mb-4 divide-y divide-slate-100">
-          {(plans ?? []).map((p) => (
-            <li key={p.id} className="flex items-center justify-between py-2.5">
-              <span className="font-medium text-slate-900">{p.name}</span>
-              <span className="text-sm text-muted">
-                {formatMoney(p.price)} / {p.duration_days}d
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form onSubmit={handleAdd} className="space-y-2">
-        <input
-          type="text"
-          placeholder="Plan name"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className={inputClass}
+    <button
+      type="button"
+      onClick={() => navigate(to)}
+      className="flex min-h-[60px] w-full items-center justify-between gap-3 border-b border-line/60 py-3 text-left last:border-b-0 active:opacity-60"
+    >
+      <div className="min-w-0">
+        <p className="font-semibold text-fg">{label}</p>
+        <p className="truncate text-xs text-muted">{hint}</p>
+      </div>
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        className="shrink-0 text-muted"
+        aria-hidden
+      >
+        <path
+          d="M9 5l7 7-7 7"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
-        <div className="flex gap-2">
-          <input
-            type="number"
-            placeholder="Price"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            required
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className={inputClass}
-          />
-          <input
-            type="number"
-            placeholder="Days"
-            inputMode="numeric"
-            min="1"
-            required
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <button
-          type="submit"
-          disabled={busy || !online}
-          className="min-h-[44px] w-full rounded-xl bg-accent-soft px-4 py-2.5 font-semibold text-accent-text active:opacity-70 disabled:opacity-50"
-        >
-          Add plan
-        </button>
-      </form>
-    </SectionCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Rooms & routers
-// ---------------------------------------------------------------------------
-
-function RoomsSection() {
-  const rooms = useRooms();
-  const routers = useRouters();
-  const online = useOnline();
-  const [roomName, setRoomName] = useState('');
-  const [routerLabel, setRouterLabel] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function handleAdd(e: FormEvent) {
-    e.preventDefault();
-    if (busy) return;
-    setError(null);
-    setBusy(true);
-
-    const { data: room, error: roomErr } = await supabase
-      .from('rooms')
-      .insert({ name: roomName.trim() })
-      .select('id')
-      .single();
-
-    if (roomErr || !room) {
-      setBusy(false);
-      setError(roomErr?.message ?? 'Failed to create room');
-      return;
-    }
-
-    if (routerLabel.trim()) {
-      const { error: routerErr } = await supabase
-        .from('routers')
-        .insert({ room_id: room.id, label: routerLabel.trim() });
-      if (routerErr) {
-        setBusy(false);
-        setError(`Room created, but router failed: ${routerErr.message}`);
-        await pullAll();
-        return;
-      }
-    }
-
-    setBusy(false);
-    setRoomName('');
-    setRouterLabel('');
-    await pullAll();
-  }
-
-  return (
-    <SectionCard title="Rooms & routers">
-      {(rooms ?? []).length > 0 && (
-        <ul className="mb-4 divide-y divide-slate-100">
-          {(rooms ?? []).map((r) => {
-            const router = routers?.find((rt) => rt.room_id === r.id);
-            return (
-              <li key={r.id} className="flex items-center justify-between py-2.5">
-                <span className="font-medium text-slate-900">{r.name}</span>
-                <span className="text-sm text-muted">{router?.label ?? 'no router'}</span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <form onSubmit={handleAdd} className="space-y-2">
-        <input
-          type="text"
-          placeholder="Room name"
-          required
-          value={roomName}
-          onChange={(e) => setRoomName(e.target.value)}
-          className={inputClass}
-        />
-        <input
-          type="text"
-          placeholder="Router label (optional)"
-          value={routerLabel}
-          onChange={(e) => setRouterLabel(e.target.value)}
-          className={inputClass}
-        />
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        <button
-          type="submit"
-          disabled={busy || !online}
-          className="min-h-[44px] w-full rounded-xl bg-accent-soft px-4 py-2.5 font-semibold text-accent-text active:opacity-70 disabled:opacity-50"
-        >
-          Add room
-        </button>
-      </form>
-    </SectionCard>
+      </svg>
+    </button>
   );
 }
 
@@ -262,15 +107,20 @@ function StaffSection() {
   return (
     <SectionCard title="Staff accounts">
       {(staff ?? []).length > 0 && (
-        <ul className="mb-4 divide-y divide-slate-100">
+        <ul className="mb-5">
           {(staff ?? []).map((u) => (
-            <li key={u.id} className="flex items-center justify-between py-2.5">
-              <div>
-                <p className="font-medium text-slate-900">{u.display_name}</p>
-                <p className="text-xs text-muted">@{u.username} · {u.role}</p>
+            <li
+              key={u.id}
+              className="flex items-center justify-between gap-3 border-b border-line/60 py-3 last:border-b-0"
+            >
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-fg">{u.display_name}</p>
+                <p className="truncate text-xs text-muted">
+                  @{u.username} · {u.role}
+                </p>
               </div>
               {!u.is_active && (
-                <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-danger">
+                <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-semibold text-danger">
                   inactive
                 </span>
               )}
@@ -278,42 +128,66 @@ function StaffSection() {
           ))}
         </ul>
       )}
-      <form onSubmit={handleCreate} className="space-y-2">
-        <input
-          type="text"
-          placeholder="Username (lowercase)"
-          required
-          autoCapitalize="none"
-          autoCorrect="off"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className={inputClass}
-        />
-        <input
-          type="text"
-          placeholder="Display name"
-          required
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          className={inputClass}
-        />
-        <input
-          type="password"
-          placeholder="Password (min 8 chars)"
-          required
-          minLength={8}
-          autoComplete="new-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className={inputClass}
-        />
-        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-        {success && <p className="text-sm text-ok">{success}</p>}
-        <button
-          type="submit"
-          disabled={busy || !online}
-          className="min-h-[44px] w-full rounded-xl bg-accent-soft px-4 py-2.5 font-semibold text-accent-text active:opacity-70 disabled:opacity-50"
-        >
+
+      <form onSubmit={handleCreate} className="space-y-3">
+        <div>
+          <label htmlFor="staff-username" className={labelClass}>
+            Username
+          </label>
+          <input
+            id="staff-username"
+            type="text"
+            placeholder="lowercase, no spaces"
+            required
+            autoCapitalize="none"
+            autoCorrect="off"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="staff-name" className={labelClass}>
+            Display name
+          </label>
+          <input
+            id="staff-name"
+            type="text"
+            required
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className={fieldClass}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="staff-password" className={labelClass}>
+            Password
+          </label>
+          <input
+            id="staff-password"
+            type="password"
+            placeholder="min 8 characters"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={fieldClass}
+          />
+        </div>
+
+        {error && (
+          <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
+        {success && (
+          <p className="rounded-2xl bg-ok-soft px-4 py-3 text-sm text-ok">{success}</p>
+        )}
+
+        <button type="submit" disabled={busy || !online} className={secondaryButtonClass}>
           {busy ? 'Creating…' : 'Create staff account'}
         </button>
       </form>
@@ -326,35 +200,70 @@ function StaffSection() {
 export function SettingsScreen() {
   const { appUser, signOut, isSuperAdmin } = useAuth();
   const online = useOnline();
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+
+  const initials = (appUser?.display_name ?? '?')
+    .split(' ')
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
-    <Screen title="Settings">
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <p className="font-semibold text-slate-900">{appUser?.display_name}</p>
-        <p className="text-sm text-muted">@{appUser?.username} · {appUser?.role}</p>
-      </div>
+    <>
+      <Screen title="Settings">
+        <section className="flex items-center gap-4 rounded-4xl bg-surface p-5 shadow-card">
+          <div
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent-gradient text-lg font-bold text-white"
+            aria-hidden
+          >
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-lg font-bold text-fg">{appUser?.display_name}</p>
+            <p className="truncate text-sm text-muted">
+              @{appUser?.username} · {appUser?.role}
+            </p>
+          </div>
+        </section>
 
-      {isSuperAdmin && !online && (
-        <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-warn">
-          Settings changes need a connection.
-        </p>
+        {isSuperAdmin && (
+          <>
+            {!online && (
+              <p className="mt-4 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
+                Settings changes need a connection.
+              </p>
+            )}
+
+            <SectionCard title="Manage">
+              <ManageLink to="/rooms" label="Rooms" hint="Add, rename or remove rooms & routers" />
+              <ManageLink to="/plans" label="Plans" hint="Price, speed and validity" />
+              <ManageLink to="/clients" label="Clients" hint="Add or edit client accounts" />
+            </SectionCard>
+
+            <StaffSection />
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setConfirmingSignOut(true)}
+          className="mt-6 flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-danger-soft px-4 py-3 font-semibold text-danger active:opacity-70"
+        >
+          Sign out
+        </button>
+      </Screen>
+
+      {confirmingSignOut && (
+        <ConfirmDialog
+          title="Sign out?"
+          message="Cached data on this device is cleared. Anything still waiting to sync will be lost, so sync first if you're unsure."
+          confirmLabel="Sign out"
+          onConfirm={() => void signOut()}
+          onCancel={() => setConfirmingSignOut(false)}
+        />
       )}
-
-      {isSuperAdmin && (
-        <>
-          <PlansSection />
-          <RoomsSection />
-          <StaffSection />
-        </>
-      )}
-
-      <button
-        type="button"
-        onClick={() => void signOut()}
-        className="mt-6 min-h-[48px] w-full rounded-xl bg-red-50 px-4 py-3 font-semibold text-danger active:opacity-70"
-      >
-        Sign out
-      </button>
-    </Screen>
+    </>
   );
 }

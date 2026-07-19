@@ -3,12 +3,12 @@ import { NavLink } from 'react-router-dom';
 interface Tab {
   to: string;
   label: string;
-  icon: (active: boolean) => JSX.Element;
+  icon: JSX.Element;
 }
 
 const strokeProps = {
   stroke: 'currentColor',
-  strokeWidth: 1.8,
+  strokeWidth: 1.9,
   strokeLinecap: 'round',
   strokeLinejoin: 'round',
   fill: 'none',
@@ -17,19 +17,19 @@ const strokeProps = {
 const tabs: Tab[] = [
   {
     to: '/',
-    label: 'Dashboard',
-    icon: () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden>
-        <path {...strokeProps} d="M3 12l9-8 9 8" />
-        <path {...strokeProps} d="M5 10v10h5v-6h4v6h5V10" />
+    label: 'Home',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+        <path {...strokeProps} d="M3 11.5l9-7.5 9 7.5" />
+        <path {...strokeProps} d="M5.5 10v10h13V10" />
       </svg>
     ),
   },
   {
     to: '/clients',
     label: 'Clients',
-    icon: () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden>
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
         <circle {...strokeProps} cx="9" cy="8" r="3.5" />
         <path {...strokeProps} d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5" />
         <circle {...strokeProps} cx="17" cy="9" r="2.5" />
@@ -40,20 +40,31 @@ const tabs: Tab[] = [
   {
     to: '/rooms',
     label: 'Rooms',
-    icon: () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden>
-        <rect {...strokeProps} x="3" y="3" width="7.5" height="7.5" rx="1.5" />
-        <rect {...strokeProps} x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
-        <rect {...strokeProps} x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
-        <rect {...strokeProps} x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+        <rect {...strokeProps} x="3.5" y="3.5" width="7" height="7" rx="2" />
+        <rect {...strokeProps} x="13.5" y="3.5" width="7" height="7" rx="2" />
+        <rect {...strokeProps} x="3.5" y="13.5" width="7" height="7" rx="2" />
+        <rect {...strokeProps} x="13.5" y="13.5" width="7" height="7" rx="2" />
+      </svg>
+    ),
+  },
+  {
+    to: '/plans',
+    label: 'Plans',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
+        <rect {...strokeProps} x="2.5" y="5.5" width="19" height="13" rx="3" />
+        <path {...strokeProps} d="M2.5 10h19" />
+        <path {...strokeProps} d="M6.5 14.5h3" />
       </svg>
     ),
   },
   {
     to: '/settings',
     label: 'Settings',
-    icon: () => (
-      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden>
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
         <circle {...strokeProps} cx="12" cy="12" r="3" />
         <path
           {...strokeProps}
@@ -64,33 +75,31 @@ const tabs: Tab[] = [
   },
 ];
 
-/** Fixed bottom tab bar, native-app style, with safe-area inset. */
+/** Floating bottom tab bar, native-app style, with safe-area inset. */
 export function TabBar() {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white pb-safe-bottom"
+      className="fixed inset-x-0 bottom-0 z-30 flex justify-center pb-safe-bottom"
       aria-label="Main navigation"
     >
-      <div className="mx-auto flex w-full max-w-app">
-        {tabs.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            end={tab.to === '/'}
-            className={({ isActive }) =>
-              `flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 pt-1.5 pb-1 ${
-                isActive ? 'text-accent' : 'text-slate-400'
-              } active:opacity-60`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                {tab.icon(isActive)}
-                <span className="text-[10px] font-medium leading-tight">{tab.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+      <div className="w-full max-w-app px-4 pb-3">
+        <div className="flex items-center gap-0.5 rounded-3xl border border-line/80 bg-surface/85 p-1.5 shadow-float backdrop-blur-xl">
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              end={tab.to === '/'}
+              className={({ isActive }) =>
+                `flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl transition-colors ${
+                  isActive ? 'bg-accent-soft text-accent-text' : 'text-muted'
+                } active:opacity-60`
+              }
+            >
+              {tab.icon}
+              <span className="text-[10px] font-semibold leading-none">{tab.label}</span>
+            </NavLink>
+          ))}
+        </div>
       </div>
     </nav>
   );

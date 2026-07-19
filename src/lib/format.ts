@@ -48,3 +48,27 @@ export function relativeTimeFrom(iso: string | null): string {
 export function newUuid(): string {
   return crypto.randomUUID();
 }
+
+// --- <input type="date"> bridging ------------------------------------------
+// The DB stores timestamptz; the control speaks local "YYYY-MM-DD".
+
+/** ISO timestamp -> value for a date input (local calendar day). */
+export function toDateInputValue(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const month = `${d.getMonth() + 1}`.padStart(2, '0');
+  const day = `${d.getDate()}`.padStart(2, '0');
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Date input value -> ISO timestamp at the END of that local day, so a plan
+ * dated "Dec 31" stays offerable for all of December 31st.
+ */
+export function fromDateInputValue(value: string): string | null {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
+}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { discardOutboxItem, flushOutbox, retryOutboxItem } from '@/lib/sync';
@@ -8,6 +9,8 @@ import type {
   OutboxPaymentPayload,
 } from '@/lib/types';
 import { Screen } from '@/components/Screen';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { primaryButtonClass } from '@/components/formStyles';
 import { useOnline } from './useSyncStatus';
 
 function describeItem(item: OutboxItem): string {
@@ -19,24 +22,30 @@ function describeItem(item: OutboxItem): string {
   return e.action === 'connect' ? 'Connect client' : 'Disconnect client';
 }
 
-function OutboxRow({ item }: { item: OutboxItem }) {
+function OutboxRow({
+  item,
+  onDiscard,
+}: {
+  item: OutboxItem;
+  onDiscard: (item: OutboxItem) => void;
+}) {
   const client = useLiveQuery(
     () => db.clients.get(item.payload.client_id),
     [item.payload.client_id],
   );
 
   return (
-    <li className="rounded-xl bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="font-medium text-slate-900">{describeItem(item)}</p>
-          <p className="text-sm text-muted">
+    <li className="rounded-3xl bg-surface p-4 shadow-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-fg">{describeItem(item)}</p>
+          <p className="truncate text-sm text-muted">
             {client?.full_name ?? 'Unknown client'} · {formatDateTime(item.created_at)}
           </p>
         </div>
         <span
-          className={`rounded-full px-2 py-1 text-xs font-semibold ${
-            item.status === 'failed' ? 'bg-red-50 text-danger' : 'bg-amber-50 text-warn'
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+            item.status === 'failed' ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn'
           }`}
         >
           {item.status}
@@ -44,7 +53,9 @@ function OutboxRow({ item }: { item: OutboxItem }) {
       </div>
 
       {item.error && (
-        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-danger">{item.error}</p>
+        <p className="mt-3 rounded-2xl bg-danger-soft px-3 py-2 text-xs text-danger">
+          {item.error}
+        </p>
       )}
 
       {item.status === 'failed' && (
@@ -52,18 +63,14 @@ function OutboxRow({ item }: { item: OutboxItem }) {
           <button
             type="button"
             onClick={() => void retryOutboxItem(item.client_uuid)}
-            className="min-h-[44px] flex-1 rounded-xl bg-accent-soft px-3 py-2 text-sm font-semibold text-accent-text active:opacity-70"
+            className="min-h-[46px] flex-1 rounded-2xl bg-accent-soft px-3 py-2 text-sm font-semibold text-accent-text active:opacity-70"
           >
             Retry
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('Discard this unsynced item? This cannot be undone.')) {
-                void discardOutboxItem(item.client_uuid);
-              }
-            }}
-            className="min-h-[44px] flex-1 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-danger active:opacity-70"
+            onClick={() => onDiscard(item)}
+            className="min-h-[46px] flex-1 rounded-2xl bg-danger-soft px-3 py-2 text-sm font-semibold text-danger active:opacity-70"
           >
             Discard
           </button>
@@ -76,32 +83,49 @@ function OutboxRow({ item }: { item: OutboxItem }) {
 export function SyncScreen() {
   const online = useOnline();
   const items = useLiveQuery(() => db.outbox.orderBy('created_at').toArray(), []) ?? [];
+  const [discarding, setDiscarding] = useState<OutboxItem | null>(null);
 
   return (
-    <Screen title="Sync queue" back>
-      {items.length === 0 ? (
-        <div className="py-16 text-center text-muted">
-          <p className="text-4xl">✅</p>
-          <p className="mt-2 text-sm">Everything is synced.</p>
-        </div>
-      ) : (
-        <>
-          {online && (
-            <button
-              type="button"
-              onClick={() => void flushOutbox()}
-              className="mb-4 min-h-[48px] w-full rounded-xl bg-accent px-4 py-3 font-semibold text-white active:opacity-80"
-            >
-              Sync now
-            </button>
-          )}
-          <ul className="space-y-3">
-            {items.map((item) => (
-              <OutboxRow key={item.client_uuid} item={item} />
-            ))}
-          </ul>
-        </>
+    <>
+      <Screen title="Sync queue" back>
+        {items.length === 0 ? (
+          <div className="rounded-4xl bg-surface p-10 text-center shadow-card">
+            <p className="text-3xl">✅</p>
+            <p className="mt-3 font-semibold text-fg">Everything is synced</p>
+            <p className="mt-1 text-sm text-muted">Nothing is waiting to upload.</p>
+          </div>
+        ) : (
+          <>
+            {online && (
+              <button
+                type="button"
+                onClick={() => void flushOutbox()}
+                className={`mb-4 ${primaryButtonClass}`}
+              >
+                Sync now
+              </button>
+            )}
+            <ul className="space-y-3">
+              {items.map((item) => (
+                <OutboxRow key={item.client_uuid} item={item} onDiscard={setDiscarding} />
+              ))}
+            </ul>
+          </>
+        )}
+      </Screen>
+
+      {discarding && (
+        <ConfirmDialog
+          title="Discard this item?"
+          message={`"${describeItem(discarding)}" was rejected by the server and will be deleted from this device. This cannot be undone.`}
+          confirmLabel="Discard"
+          onConfirm={() => {
+            void discardOutboxItem(discarding.client_uuid);
+            setDiscarding(null);
+          }}
+          onCancel={() => setDiscarding(null)}
+        />
       )}
-    </Screen>
+    </>
   );
 }

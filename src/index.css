@@ -2,14 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theme tokens. Every colour in the app resolves through one of these, so the
+ * dark variant below is the only place the palette flips. Values are bare
+ * "R G B" triples so Tailwind can apply opacity modifiers (bg-surface/80).
+ */
+@layer base {
+  :root {
+    color-scheme: light dark;
+
+    --canvas: 245 246 249;
+    --surface: 255 255 255;
+    --surface-2: 240 242 246;
+    --line: 226 229 236;
+    --fg: 14 16 22;
+    --fg-muted: 106 114 128;
+
+    --accent: 79 70 229;
+    --accent-2: 147 51 234;
+    --accent-soft: 238 236 254;
+    --accent-text: 67 56 202;
+
+    --ok: 21 156 74;
+    --ok-soft: 219 250 229;
+    --warn: 176 82 8;
+    --warn-soft: 254 243 205;
+    --danger: 214 38 38;
+    --danger-soft: 254 228 228;
+
+    --shadow-card: 0 1px 2px rgb(14 16 22 / 0.05), 0 10px 28px -14px rgb(14 16 22 / 0.16);
+    --shadow-float: 0 6px 16px -4px rgb(14 16 22 / 0.16), 0 12px 32px -10px rgb(14 16 22 / 0.2);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: 9 9 12;
+      --surface: 22 23 28;
+      --surface-2: 32 34 41;
+      --line: 42 44 53;
+      --fg: 244 245 249;
+      --fg-muted: 141 146 157;
+
+      --accent: 109 106 249;
+      --accent-2: 176 96 253;
+      --accent-soft: 32 31 62;
+      --accent-text: 179 176 254;
+
+      --ok: 52 200 110;
+      --ok-soft: 17 47 31;
+      --warn: 245 165 36;
+      --warn-soft: 56 40 12;
+      --danger: 250 116 116;
+      --danger-soft: 63 25 27;
+
+      --shadow-card: 0 1px 2px rgb(0 0 0 / 0.5), 0 10px 28px -14px rgb(0 0 0 / 0.7);
+      --shadow-float: 0 6px 16px -4px rgb(0 0 0 / 0.6), 0 12px 32px -10px rgb(0 0 0 / 0.8);
+    }
+  }
+}
+
 html {
   /* Native-app feel: no rubber-band overscroll chrome, no tap highlight. */
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  background-color: rgb(var(--canvas));
 }
 
 body {
-  @apply bg-slate-50 font-sans text-slate-900 antialiased;
+  @apply bg-canvas font-sans text-fg antialiased;
   /* Prevent iOS text inflation in landscape. */
   -webkit-text-size-adjust: 100%;
 }
@@ -24,4 +84,50 @@ select,
 textarea {
   /* 16px+ prevents iOS zoom-on-focus. */
   font-size: 16px;
+}
+
+/* Native date pickers render a light-on-light icon in dark mode. */
+@media (prefers-color-scheme: dark) {
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.65;
+  }
+}
+
+@layer components {
+  /* Bottom sheets and dialogs share one entrance so they feel like one system. */
+  .animate-sheet-in {
+    animation: sheet-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .animate-fade-in {
+    animation: fade-in 180ms ease-out;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(6%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sheet-in,
+  .animate-fade-in {
+    animation: none;
+  }
 }
