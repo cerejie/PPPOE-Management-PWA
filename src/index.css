@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  /* Native-app feel: no rubber-band overscroll chrome, no tap highlight. */
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-slate-50 font-sans text-slate-900 antialiased;
+  /* Prevent iOS text inflation in landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Hide scrollbars inside horizontal chip rows. */
+::-webkit-scrollbar {
+  display: none;
+}
+
+input,
+select,
+textarea {
+  /* 16px+ prevents iOS zoom-on-focus. */
+  font-size: 16px;
+}

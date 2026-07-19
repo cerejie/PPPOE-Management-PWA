@@ -1,0 +1,149 @@
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
+import { daysUntil } from '@/lib/format';
+import type {
+  Client,
+  ConnectionEvent,
+  ConnectionStatus,
+  OutboxItem,
+  Payment,
+  Plan,
+  Room,
+  Router,
+} from '@/lib/types';
+
+export type ExpiryFilter = 'all' | 'expiring' | 'expired';
+
+export interface ClientFilters {
+  search: string;
+  status: ConnectionStatus | 'all';
+  roomId: string | 'all';
+  expiry: ExpiryFilter;
+}
+
+export function useClients(filters: ClientFilters): Client[] | undefined {
+  return useLiveQuery(async () => {
+    let list = await db.clients.toArray();
+    list = list.filter((c) => !c.deleted_at);
+
+    if (filters.status !== 'all') {
+      list = list.filter((c) => c.connection_status === filters.status);
+    }
+    if (filters.roomId !== 'all') {
+      list = list.filter((c) => c.room_id === filters.roomId);
+    }
+    if (filters.expiry !== 'all') {
+      list = list.filter((c) => {
+        const d = daysUntil(c.expires_at);
+        if (d === null) return false;
+        return filters.expiry === 'expired' ? d < 0 : d >= 0 && d <= 7;
+      });
+    }
+
+    const q = filters.search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (c) =>
+          c.full_name.toLowerCase().includes(q) ||
+          c.pppoe_username.toLowerCase().includes(q),
+      );
+    }
+
+    return list.sort((a, b) => a.full_name.localeCompare(b.full_name));
+  }, [filters.search, filters.status, filters.roomId, filters.expiry]);
+}
+
+export function useClient(id: string | undefined): Client | undefined {
+  return useLiveQuery(
+    async () => (id ? await db.clients.get(id) : undefined),
+    [id],
+  );
+}
+
+export function useRooms(): Room[] | undefined {
+  return useLiveQuery(async () => {
+    const rooms = await db.rooms.toArray();
+    return rooms
+      .filter((r) => !r.deleted_at)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
+}
+
+export function useRouters(): Router[] | undefined {
+  return useLiveQuery(async () => {
+    const routers = await db.routers.toArray();
+    return routers.filter((r) => !r.deleted_at);
+  }, []);
+}
+
+export function usePlans(): Plan[] | undefined {
+  return useLiveQuery(
+    async () => (await db.plans.toArray()).sort((a, b) => a.price - b.price),
+    [],
+  );
+}
+
+export function useClientPayments(clientId: string | undefined): Payment[] | undefined {
+  return useLiveQuery(async () => {
+    if (!clientId) return [];
+    const rows = await db.payments.where('client_id').equals(clientId).toArray();
+    return rows.sort((a, b) => b.paid_at.localeCompare(a.paid_at));
+  }, [clientId]);
+}
+
+export function useClientEvents(
+  clientId: string | undefined,
+): ConnectionEvent[] | undefined {
+  return useLiveQuery(async () => {
+    if (!clientId) return [];
+    const rows = await db.connection_events.where('client_id').equals(clientId).toArray();
+    return rows.sort((a, b) => b.performed_at.localeCompare(a.performed_at));
+  }, [clientId]);
+}
+
+/** Outbox items for one client, so its detail screen can mark rows pending. */
+export function useClientOutbox(clientId: string | undefined): OutboxItem[] | undefined {
+  return useLiveQuery(async () => {
+    if (!clientId) return [];
+    const items = await db.outbox.toArray();
+    return items
+      .filter((i) => i.payload.client_id === clientId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }, [clientId]);
+}
+
+export interface DashboardStats {
+  connected: number;
+  disconnected: number;
+  expiring7d: number;
+  expired: number;
+  soonest: Client[];
+}
+
+export function useDashboardStats(): DashboardStats | undefined {
+  return useLiveQuery(async () => {
+    const clients = (await db.clients.toArray()).filter((c) => !c.deleted_at);
+
+    let connected = 0;
+    let disconnected = 0;
+    let expiring7d = 0;
+    let expired = 0;
+
+    for (const c of clients) {
+      if (c.connection_status === 'connected') connected += 1;
+      else disconnected += 1;
+      const d = daysUntil(c.expires_at);
+      if (d !== null) {
+        if (d < 0) expired += 1;
+        else if (d <= 7) expiring7d += 1;
+      }
+    }
+
+    const soonest = clients
+      .filter((c) => c.expires_at !== null && (daysUntil(c.expires_at) ?? 0) >= 0)
+      .sort((a, b) => (a.expires_at ?? '').localeCompare(b.expires_at ?? ''))
+      .slice(0, 8);
+
+    return { connected, disconnected, expiring7d, expired, soonest };
+  }, []);
+}
