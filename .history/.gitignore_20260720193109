@@ -17,6 +17,6 @@ supabase/.branches
 supabase/.temp
 
 
-graphify-out/
+graphify-out
 
-CLAUDE.md
+CLAUDE
