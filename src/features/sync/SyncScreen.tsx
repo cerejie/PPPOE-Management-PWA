@@ -3,23 +3,53 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { discardOutboxItem, flushOutbox, retryOutboxItem } from '@/lib/sync';
 import { formatDateTime, formatMoney } from '@/lib/format';
-import type {
-  OutboxConnectionEventPayload,
-  OutboxItem,
-  OutboxPaymentPayload,
-} from '@/lib/types';
+import { isClientEvent, type EntityTable, type OutboxItem } from '@/lib/types';
 import { Screen } from '@/components/Screen';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { primaryButtonClass } from '@/components/formStyles';
 import { useOnline } from './useSyncStatus';
 
+/** Singular noun per table, for describing a queued entity write. */
+const ENTITY_LABEL: Record<EntityTable, string> = {
+  clients: 'client',
+  rooms: 'room',
+  routers: 'router',
+  plans: 'plan',
+};
+
 function describeItem(item: OutboxItem): string {
-  if (item.kind === 'payment') {
-    const p = item.payload as OutboxPaymentPayload;
-    return `Payment ${formatMoney(p.amount)}`;
+  if (item.kind === 'payment') return `Payment ${formatMoney(item.payload.amount)}`;
+  if (item.kind === 'pause_event') {
+    return item.payload.action === 'pause' ? 'Pause client' : 'Resume client';
   }
-  const e = item.payload as OutboxConnectionEventPayload;
-  return e.action === 'connect' ? 'Connect client' : 'Disconnect client';
+  if (item.kind === 'connection_event') {
+    return item.payload.action === 'connect' ? 'Connect client' : 'Disconnect client';
+  }
+
+  const e = item.payload;
+  const noun = ENTITY_LABEL[e.table];
+  if (e.op === 'insert') return `Add ${noun}`;
+  // A soft delete is an update that sets deleted_at; name it as a delete.
+  return 'deleted_at' in e.values ? `Delete ${noun}` : `Edit ${noun}`;
+}
+
+/**
+ * Name of the row an item refers to. Entity writes resolve against their own
+ * table — including rows that only exist locally, which is the whole point.
+ */
+function useSubject(item: OutboxItem): string {
+  return (
+    useLiveQuery(async () => {
+      if (isClientEvent(item)) {
+        const client = await db.clients.get(item.payload.client_id);
+        return client?.full_name ?? 'Unknown client';
+      }
+      const row = (await db.table(item.payload.table).get(item.payload.row_id)) as
+        | { full_name?: string; name?: string; label?: string }
+        | undefined;
+      return row?.full_name ?? row?.name ?? row?.label ?? ENTITY_LABEL[item.payload.table];
+    }, [item.client_uuid]) ?? '…'
+  );
 }
 
 function OutboxRow({
@@ -29,10 +59,7 @@ function OutboxRow({
   item: OutboxItem;
   onDiscard: (item: OutboxItem) => void;
 }) {
-  const client = useLiveQuery(
-    () => db.clients.get(item.payload.client_id),
-    [item.payload.client_id],
-  );
+  const subject = useSubject(item);
 
   return (
     <li className="rounded-3xl bg-surface p-4 shadow-card">
@@ -40,7 +67,7 @@ function OutboxRow({
         <div className="min-w-0">
           <p className="font-semibold text-fg">{describeItem(item)}</p>
           <p className="truncate text-sm text-muted">
-            {client?.full_name ?? 'Unknown client'} · {formatDateTime(item.created_at)}
+            {subject} · {formatDateTime(item.created_at)}
           </p>
         </div>
         <span

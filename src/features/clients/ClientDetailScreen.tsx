@@ -113,17 +113,31 @@ export function ClientDetailScreen() {
                 since {formatDateTime(client.connection_status_updated_at)}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleToggle()}
-              disabled={toggling}
-              aria-pressed={connected}
-              className={`min-h-[48px] shrink-0 rounded-2xl px-5 py-3 font-semibold text-white shadow-float active:opacity-80 disabled:opacity-50 ${
-                connected ? 'bg-danger' : 'bg-ok'
-              }`}
-            >
-              {connected ? 'Disconnect' : 'Connect'}
-            </button>
+            {/*
+              While paused the line is down *because* of the pause, and Resume
+              already reconnects it. Offering Connect here would duplicate that
+              button — and worse, connecting without resuming leaves the client
+              online with a frozen clock, a state Resume can never produce.
+            */}
+            {paused ? (
+              <span className="shrink-0 text-right text-xs font-medium text-muted">
+                Resume to
+                <br />
+                reconnect
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleToggle()}
+                disabled={toggling}
+                aria-pressed={connected}
+                className={`min-h-[48px] shrink-0 rounded-2xl px-5 py-3 font-semibold text-white shadow-float active:opacity-80 disabled:opacity-50 ${
+                  connected ? 'bg-danger' : 'bg-ok'
+                }`}
+              >
+                {connected ? 'Disconnect' : 'Connect'}
+              </button>
+            )}
           </div>
           {pendingEvents.length > 0 && (
             <p className="mt-4 rounded-2xl bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
@@ -155,7 +169,7 @@ export function ClientDetailScreen() {
                 paused ? 'bg-ok text-white shadow-float' : 'bg-surface-2 text-fg'
               }`}
             >
-              {paused ? 'Resume' : 'Pause'}
+              {paused ? 'Resume & connect' : 'Pause'}
             </button>
           </div>
         </section>

@@ -1,5 +1,16 @@
 # CLAUDE.md
 
+
+## Project Rules
+
+### Package Manager
+
+- This project exclusively uses **Yarn**.
+- Always generate commands using Yarn.
+- Never suggest or execute `npm`, `npx`, `pnpm`, or `bun` unless explicitly instructed.
+- Convert any npm examples or documentation to the equivalent Yarn commands automatically.
+
+
 Offline-first PWA for managing PPPoE clients. Supabase is the only backend.
 Stack, env vars, and first-run setup: see [README.md](README.md). Scripts: [package.json](package.json).
 
@@ -31,29 +42,50 @@ Reads and writes use different paths, deliberately:
 - **Reads** come from Dexie via `useLiveQuery`, never from Supabase. React
   Query is installed but is used in exactly one place (`useSyncStatus.ts`);
   do not reach for it for feature data.
-- **Writes** always go through the outbox (`queuePayment` /
-  `queueConnectionEvent` / `queuePauseEvent`), then `flushOutbox()` if
-  `navigator.onLine`. One write path online and offline means idempotency and
-  optimistic UI are handled in one place. Never call `supabase.from(...)`
-  insert/update from a screen.
-- Every outbox row carries a device-generated `client_uuid`; the server insert
-  uses `onConflict: 'client_uuid', ignoreDuplicates: true`, so retries can
-  never double-post. New queued write kinds must follow this or replay
-  double-charges clients.
-- `pullAll()` is a **replace-all mirror** (clear + bulkPut). Anything written
-  only to Dexie and not queued to the outbox is destroyed on the next sync.
+- **Writes** — *every* write goes through the outbox, with no exceptions:
+  `queuePayment` / `queueConnectionEvent` / `queuePauseEvent` for events, and
+  `queueEntityWrite` for SuperAdmin CRUD on clients / rooms / routers / plans.
+  One write path online and offline means idempotency and optimistic UI are
+  handled in one place. Never call `supabase.from(...)` insert/update from a
+  screen or an `actions.ts`.
+- Actions call `settleWrite(uuid)` after queueing. Online it flushes and returns
+  a server rejection as a string for the form to show (and rolls the local row
+  back), preserving the pre-outbox UX; offline it is a no-op and the write just
+  stays queued.
+- Every outbox row carries a device-generated `client_uuid`; event inserts use
+  `onConflict: 'client_uuid'` and entity inserts `onConflict: 'id'`, both with
+  `ignoreDuplicates: true`, so retries can never double-post. New queued write
+  kinds must follow this or replay double-charges clients.
+- Entity rows get their **`id` generated on the device** (`newUuid()`), so a
+  client added offline is navigable and referenceable immediately.
+- `pullAll()` is a **replace-all mirror** (clear + bulkPut), then calls
+  `replayPendingOutbox()` to re-apply everything the outbox still owns.
+  Anything written to Dexie *outside* the outbox is destroyed on the next sync.
+- Guards that used to count rows server-side (clients still in a room / on a
+  plan) read Dexie instead, so they still hold offline.
 - Sync mirrors 6 months of payments and the newest 500 rows per event table.
   Any "full history" view must surface a truncation warning, as `ledger.ts` does.
 - Transient failure → item stays `pending` and auto-retries. Server rejection
   (e.g. RLS) → `failed`, kept for manual review in the Sync screen, never
   auto-retried and never dropped.
+- A rejected **event** drops its optimistic effect on the next pull (the server
+  refused it, so the mirror should match). A rejected **entity write** keeps its
+  local row and is flagged with `SyncBadge` — a client added offline must never
+  silently vanish days later. `replayPendingOutbox` encodes that difference.
 
 ## Server-owned state
 
 `clients.expires_at`, `connection_status`, and `paused_at` are derived state
-written by DB triggers. The client mirrors that math locally (see
-`queuePauseEvent`) purely so offline UI is correct — that duplication is
-intentional, not a bug. Keep the two in sync when either side changes.
+written by DB triggers. The client mirrors that math locally — one `mirror*`
+function in `sync.ts` per trigger (`mirrorPayment` ↔ `apply_payment_to_client`,
+`mirrorConnectionEvent` ↔ `apply_connection_event`, `mirrorPauseEvent` ↔ the
+pause trigger) — purely so offline UI is correct. That duplication is
+intentional, not a bug: change a trigger and you must change its mirror.
+
+`mirrorPayment` extends from `paid_at` while the trigger extends from `now()` at
+insert time, so a payment queued offline for days lands slightly earlier locally
+than server-side. The pull after a successful flush overwrites it; do not try to
+"fix" this by guessing the flush time.
 
 `payments` has no update/delete RLS policy by design; a correction is a new row
 with a negative amount.

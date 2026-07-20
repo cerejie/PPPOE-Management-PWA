@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { daysUntil } from '@/lib/format';
+import { isClientEvent } from '@/lib/types';
 import type { Client, ConnectionStatus, OutboxItem, Plan, Room, Router } from '@/lib/types';
 
 export type ExpiryFilter = 'all' | 'expiring' | 'expired';
@@ -95,7 +96,7 @@ export function useClientOutbox(clientId: string | undefined): OutboxItem[] | un
     if (!clientId) return [];
     const items = await db.outbox.toArray();
     return items
-      .filter((i) => i.payload.client_id === clientId)
+      .filter((i) => isClientEvent(i) && i.payload.client_id === clientId)
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [clientId]);
 }

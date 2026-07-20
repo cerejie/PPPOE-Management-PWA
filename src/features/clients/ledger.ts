@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { formatDuration } from '@/lib/format';
+import { isClientEvent } from '@/lib/types';
 import type {
   OutboxConnectionEventPayload,
   OutboxPauseEventPayload,
@@ -94,9 +95,10 @@ export function useClientLedger(clientId: string | undefined): Ledger | undefine
       });
     }
 
-    // Unsynced writes, so the timeline is honest while offline.
+    // Unsynced writes, so the timeline is honest while offline. Entity writes
+    // (client edits, room changes) are not timeline events and are skipped.
     for (const item of outbox) {
-      if (item.payload.client_id !== clientId) continue;
+      if (!isClientEvent(item) || item.payload.client_id !== clientId) continue;
       const failed = item.status === 'failed';
 
       if (item.kind === 'payment') {

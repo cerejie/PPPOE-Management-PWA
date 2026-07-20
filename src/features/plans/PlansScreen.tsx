@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Screen } from '@/components/Screen';
 import { Fab } from '@/components/Fab';
+import { SyncBadge } from '@/components/SyncBadge';
 import { useAuth } from '@/features/auth/AuthContext';
 import { usePlans } from '@/features/clients/hooks';
+import { useEntitySync } from '@/features/sync/hooks';
 import { db } from '@/lib/db';
+import type { EntityWriteState } from '@/lib/sync';
 import { formatDate, formatMoney } from '@/lib/format';
 import type { Plan } from '@/lib/types';
 import { isPlanOfferable } from './actions';
@@ -27,10 +30,12 @@ function PlanCard({
   plan,
   clientCount,
   onEdit,
+  syncState,
 }: {
   plan: Plan;
   clientCount: number;
   onEdit: (() => void) | null;
+  syncState: EntityWriteState | undefined;
 }) {
   const offerable = isPlanOfferable(plan);
 
@@ -54,6 +59,7 @@ function PlanCard({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <SyncBadge state={syncState} />
         <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-accent-text">
           {plan.mbps > 0 ? `${plan.mbps} Mbps` : 'Speed not set'}
         </span>
@@ -98,6 +104,7 @@ export function PlansScreen() {
   const plans = usePlans();
   const counts = usePlanClientCounts();
   const { isSuperAdmin } = useAuth();
+  const unsynced = useEntitySync('plans');
   const [editing, setEditing] = useState<Editing>(null);
 
   return (
@@ -123,6 +130,7 @@ export function PlansScreen() {
                 plan={plan}
                 clientCount={counts?.[plan.id] ?? 0}
                 onEdit={isSuperAdmin ? () => setEditing(plan) : null}
+                syncState={unsynced.get(plan.id)}
               />
             ))}
           </ul>

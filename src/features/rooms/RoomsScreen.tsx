@@ -3,7 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
 import { Screen } from '@/components/Screen';
 import { Fab } from '@/components/Fab';
+import { SyncBadge } from '@/components/SyncBadge';
 import { useAuth } from '@/features/auth/AuthContext';
+import { useEntitySync } from '@/features/sync/hooks';
 import { db } from '@/lib/db';
 import type { Room } from '@/lib/types';
 import { RoomFormSheet } from './RoomFormSheet';
@@ -70,6 +72,7 @@ export function RoomsScreen() {
   const rows = useRoomRows();
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
+  const unsynced = useEntitySync('rooms');
   const [editing, setEditing] = useState<Editing>(null);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>('all');
@@ -165,6 +168,8 @@ export function RoomsScreen() {
                       {room.notes ? ` · ${room.notes}` : ''}
                     </p>
                   </div>
+
+                  <SyncBadge state={unsynced.get(room.id)} />
 
                   <span className="shrink-0 text-right text-xs tabular-nums text-muted">
                     {connectedCount > 0 && (
