@@ -1,7 +1,24 @@
 import { daysUntil } from '@/lib/format';
 
+interface Props {
+  expiresAt: string | null;
+  /** When set, the subscription is frozen and the countdown is not running. */
+  pausedAt?: string | null;
+}
+
 /** Compact "days until expiry" pill with status colouring. */
-export function ExpiryBadge({ expiresAt }: { expiresAt: string | null }) {
+export function ExpiryBadge({ expiresAt, pausedAt }: Props) {
+  // While paused the stored expiry keeps sliding into the past even though the
+  // client owes nothing, so a countdown here would read as overdue. Show the
+  // frozen state instead; the remaining days are restored on resume.
+  if (pausedAt) {
+    return (
+      <span className="shrink-0 rounded-full bg-warn-soft px-2.5 py-1 text-[11px] font-semibold text-warn">
+        paused
+      </span>
+    );
+  }
+
   const days = daysUntil(expiresAt);
 
   if (days === null) {

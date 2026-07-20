@@ -1,16 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { daysUntil } from '@/lib/format';
-import type {
-  Client,
-  ConnectionEvent,
-  ConnectionStatus,
-  OutboxItem,
-  Payment,
-  Plan,
-  Room,
-  Router,
-} from '@/lib/types';
+import { isClientEvent } from '@/lib/types';
+import type { Client, ConnectionStatus, OutboxItem, Plan, Room, Router } from '@/lib/types';
 
 export type ExpiryFilter = 'all' | 'expiring' | 'expired';
 
@@ -19,6 +11,8 @@ export interface ClientFilters {
   status: ConnectionStatus | 'all';
   roomId: string | 'all';
   expiry: ExpiryFilter;
+  /** 'only' narrows to clients currently on a vacation pause. */
+  paused: 'all' | 'only';
 }
 
 export function useClients(filters: ClientFilters): Client[] | undefined {
@@ -32,8 +26,14 @@ export function useClients(filters: ClientFilters): Client[] | undefined {
     if (filters.roomId !== 'all') {
       list = list.filter((c) => c.room_id === filters.roomId);
     }
+    if (filters.paused === 'only') {
+      list = list.filter((c) => c.paused_at !== null);
+    }
     if (filters.expiry !== 'all') {
       list = list.filter((c) => {
+        // A paused client's expiry is frozen, so it is not really approaching.
+        // Chasing them for renewal while they are away would be wrong.
+        if (c.paused_at !== null) return false;
         const d = daysUntil(c.expires_at);
         if (d === null) return false;
         return filters.expiry === 'expired' ? d < 0 : d >= 0 && d <= 7;
@@ -50,7 +50,7 @@ export function useClients(filters: ClientFilters): Client[] | undefined {
     }
 
     return list.sort((a, b) => a.full_name.localeCompare(b.full_name));
-  }, [filters.search, filters.status, filters.roomId, filters.expiry]);
+  }, [filters.search, filters.status, filters.roomId, filters.expiry, filters.paused]);
 }
 
 export function useClient(id: string | undefined): Client | undefined {
@@ -90,31 +90,13 @@ export function useRoom(id: string | undefined): Room | undefined {
   return useLiveQuery(async () => (id ? await db.rooms.get(id) : undefined), [id]);
 }
 
-export function useClientPayments(clientId: string | undefined): Payment[] | undefined {
-  return useLiveQuery(async () => {
-    if (!clientId) return [];
-    const rows = await db.payments.where('client_id').equals(clientId).toArray();
-    return rows.sort((a, b) => b.paid_at.localeCompare(a.paid_at));
-  }, [clientId]);
-}
-
-export function useClientEvents(
-  clientId: string | undefined,
-): ConnectionEvent[] | undefined {
-  return useLiveQuery(async () => {
-    if (!clientId) return [];
-    const rows = await db.connection_events.where('client_id').equals(clientId).toArray();
-    return rows.sort((a, b) => b.performed_at.localeCompare(a.performed_at));
-  }, [clientId]);
-}
-
 /** Outbox items for one client, so its detail screen can mark rows pending. */
 export function useClientOutbox(clientId: string | undefined): OutboxItem[] | undefined {
   return useLiveQuery(async () => {
     if (!clientId) return [];
     const items = await db.outbox.toArray();
     return items
-      .filter((i) => i.payload.client_id === clientId)
+      .filter((i) => isClientEvent(i) && i.payload.client_id === clientId)
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }, [clientId]);
 }
@@ -127,6 +109,8 @@ export interface DashboardStats {
   disconnected: number;
   expiring7d: number;
   expired: number;
+  /** Clients on a vacation pause; excluded from the expiry counts above. */
+  paused: number;
   soonest: Client[];
 }
 
@@ -138,12 +122,17 @@ export function useDashboardStats(): DashboardStats | undefined {
     let disconnected = 0;
     let expiring7d = 0;
     let expired = 0;
+    let paused = 0;
     let monthlyRevenue = 0;
 
     for (const c of clients) {
       if (c.connection_status === 'connected') connected += 1;
       else disconnected += 1;
       if (c.account_status === 'active') monthlyRevenue += c.monthly_fee;
+      if (c.paused_at !== null) {
+        paused += 1;
+        continue; // Frozen expiry — not expiring, not expired.
+      }
       const d = daysUntil(c.expires_at);
       if (d !== null) {
         if (d < 0) expired += 1;
@@ -152,7 +141,12 @@ export function useDashboardStats(): DashboardStats | undefined {
     }
 
     const soonest = clients
-      .filter((c) => c.expires_at !== null && (daysUntil(c.expires_at) ?? 0) >= 0)
+      .filter(
+        (c) =>
+          c.paused_at === null &&
+          c.expires_at !== null &&
+          (daysUntil(c.expires_at) ?? 0) >= 0,
+      )
       .sort((a, b) => (a.expires_at ?? '').localeCompare(b.expires_at ?? ''))
       .slice(0, 8);
 
@@ -163,6 +157,7 @@ export function useDashboardStats(): DashboardStats | undefined {
       disconnected,
       expiring7d,
       expired,
+      paused,
       soonest,
     };
   }, []);

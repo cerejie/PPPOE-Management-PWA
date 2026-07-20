@@ -45,6 +45,17 @@ export function relativeTimeFrom(iso: string | null): string {
   return `${days} d ago`;
 }
 
+/** Humanised span for paused durations — "3 d 4 h", "45 min". */
+export function formatDuration(seconds: number): string {
+  if (seconds <= 0) return 'none';
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return hours > 0 ? `${days} d ${hours} h` : `${days} d`;
+  if (hours > 0) return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`;
+  return `${minutes} min`;
+}
+
 export function newUuid(): string {
   return crypto.randomUUID();
 }

@@ -4,7 +4,9 @@ import { Screen } from '@/components/Screen';
 import { Fab } from '@/components/Fab';
 import { StatusDot } from '@/components/StatusDot';
 import { ExpiryBadge } from '@/components/ExpiryBadge';
+import { SyncBadge } from '@/components/SyncBadge';
 import { useAuth } from '@/features/auth/AuthContext';
+import { useEntitySync } from '@/features/sync/hooks';
 import type { ConnectionStatus } from '@/lib/types';
 import { useClients, useRooms, type ClientFilters, type ExpiryFilter } from './hooks';
 
@@ -42,6 +44,7 @@ export function ClientsScreen() {
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
   const rooms = useRooms();
+  const unsynced = useEntitySync('clients');
 
   const filters: ClientFilters = useMemo(
     () => ({
@@ -49,6 +52,7 @@ export function ClientsScreen() {
       status: isStatus(params.get('status')) ? (params.get('status') as ConnectionStatus) : 'all',
       roomId: params.get('room') ?? 'all',
       expiry: isExpiry(params.get('expiry')) ? (params.get('expiry') as ExpiryFilter) : 'all',
+      paused: params.get('paused') === '1' ? 'only' : 'all',
     }),
     [search, params],
   );
@@ -93,7 +97,9 @@ export function ClientsScreen() {
 
         <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           <FilterChip
-            active={filters.status === 'all' && filters.expiry === 'all'}
+            active={
+              filters.status === 'all' && filters.expiry === 'all' && filters.paused === 'all'
+            }
             onClick={() => {
               setParams(
                 filters.roomId !== 'all'
@@ -130,6 +136,12 @@ export function ClientsScreen() {
             onClick={() => setParam('expiry', filters.expiry === 'expired' ? null : 'expired')}
           >
             Expired
+          </FilterChip>
+          <FilterChip
+            active={filters.paused === 'only'}
+            onClick={() => setParam('paused', filters.paused === 'only' ? null : '1')}
+          >
+            Paused
           </FilterChip>
         </div>
 
@@ -174,7 +186,10 @@ export function ClientsScreen() {
                         </p>
                       </div>
                     </div>
-                    <ExpiryBadge expiresAt={c.expires_at} />
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <SyncBadge state={unsynced.get(c.id)} />
+                      <ExpiryBadge expiresAt={c.expires_at} pausedAt={c.paused_at} />
+                    </div>
                   </Link>
                 </li>
               );

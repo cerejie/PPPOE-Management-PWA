@@ -1,10 +1,11 @@
-import { supabase } from '@/lib/supabase';
-import { pullAll } from '@/lib/sync';
+import { db } from '@/lib/db';
+import { newUuid } from '@/lib/format';
+import { queueEntityWrite, settleWrite } from '@/lib/sync';
+import type { Room, Router } from '@/lib/types';
 
-// SuperAdmin CRUD for rooms and their (at most one) router.
-// Online-only, matching the clients actions: admin edits are rare and need
-// immediate server confirmation. Offline entry stays reserved for payments
-// and connection events per the sync design.
+// SuperAdmin CRUD for rooms and their (at most one) router. Writes go through
+// the outbox so rooms can be managed offline; the guards below read the local
+// mirror rather than the server, for the same reason.
 
 export interface RoomInput {
   name: string;
@@ -14,39 +15,45 @@ export interface RoomInput {
 }
 
 export async function createRoom(input: RoomInput): Promise<string | null> {
-  const { data: room, error } = await supabase
-    .from('rooms')
-    .insert({ name: input.name.trim(), notes: input.notes })
-    .select('id')
-    .single();
+  const now = new Date().toISOString();
+  const room: Room = {
+    id: newUuid(),
+    name: input.name.trim(),
+    notes: input.notes,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
 
-  if (error || !room) return error?.message ?? 'Failed to create room.';
+  const roomUuid = await queueEntityWrite({
+    table: 'rooms',
+    op: 'insert',
+    row_id: room.id,
+    values: room,
+  });
+  const roomError = await settleWrite(roomUuid);
+  if (roomError) return roomError;
 
-  const label = input.routerLabel.trim();
-  if (label) {
-    const { error: routerError } = await supabase
-      .from('routers')
-      .insert({ room_id: room.id, label });
-    if (routerError) {
-      await pullAll();
-      return `Room created, but the router failed: ${routerError.message}`;
-    }
-  }
-
-  await pullAll();
-  return null;
+  // Queued after the room, so the flush order satisfies the room_id FK.
+  const routerError = await syncRoomRouter(room.id, input.routerLabel.trim());
+  return routerError && `Room saved, but the router failed: ${routerError}`;
 }
 
 export async function updateRoom(id: string, input: RoomInput): Promise<string | null> {
-  const { error } = await supabase
-    .from('rooms')
-    .update({ name: input.name.trim(), notes: input.notes })
-    .eq('id', id);
-  if (error) return error.message;
+  const uuid = await queueEntityWrite({
+    table: 'rooms',
+    op: 'update',
+    row_id: id,
+    values: {
+      name: input.name.trim(),
+      notes: input.notes,
+      updated_at: new Date().toISOString(),
+    },
+  });
+  const roomError = await settleWrite(uuid);
+  if (roomError) return roomError;
 
-  const routerError = await syncRoomRouter(id, input.routerLabel.trim());
-  await pullAll();
-  return routerError;
+  return syncRoomRouter(id, input.routerLabel.trim());
 }
 
 /**
@@ -57,62 +64,87 @@ export async function updateRoom(id: string, input: RoomInput): Promise<string |
  * squatting the room and block ever attaching a new router to it.
  */
 async function syncRoomRouter(roomId: string, label: string): Promise<string | null> {
-  const { data: existing, error: readError } = await supabase
-    .from('routers')
-    .select('id')
-    .eq('room_id', roomId)
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (readError) return readError.message;
+  const existing = (await db.routers.where('room_id').equals(roomId).toArray()).find(
+    (r) => !r.deleted_at,
+  );
 
   if (!label) {
     if (!existing) return null;
-    const { error } = await supabase
-      .from('routers')
-      .update({ deleted_at: new Date().toISOString(), room_id: null })
-      .eq('id', existing.id);
-    return error?.message ?? null;
+    return detachRouter(existing.id);
   }
 
   if (existing) {
-    const { error } = await supabase.from('routers').update({ label }).eq('id', existing.id);
-    return error?.message ?? null;
+    const uuid = await queueEntityWrite({
+      table: 'routers',
+      op: 'update',
+      row_id: existing.id,
+      values: { label, updated_at: new Date().toISOString() },
+    });
+    return settleWrite(uuid);
   }
 
-  const { error } = await supabase.from('routers').insert({ room_id: roomId, label });
-  return error?.message ?? null;
+  const now = new Date().toISOString();
+  const router: Router = {
+    id: newUuid(),
+    room_id: roomId,
+    label,
+    model: null,
+    notes: null,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
+  const uuid = await queueEntityWrite({
+    table: 'routers',
+    op: 'insert',
+    row_id: router.id,
+    values: router,
+  });
+  return settleWrite(uuid);
+}
+
+async function detachRouter(routerId: string): Promise<string | null> {
+  const uuid = await queueEntityWrite({
+    table: 'routers',
+    op: 'update',
+    row_id: routerId,
+    values: { deleted_at: new Date().toISOString(), room_id: null },
+  });
+  return settleWrite(uuid);
 }
 
 /**
  * Soft-delete a room. Refused while clients are still assigned to it, so we
  * never leave a client pointing at a room that no read path can resolve.
+ *
+ * The count comes from the local mirror, which offline is the only source
+ * available — and online is equivalent, since clients are mirrored in full.
  */
 export async function softDeleteRoom(id: string): Promise<string | null> {
-  const { count, error: countError } = await supabase
-    .from('clients')
-    .select('id', { count: 'exact', head: true })
-    .eq('room_id', id)
-    .is('deleted_at', null);
+  const assigned = (await db.clients.where('room_id').equals(id).toArray()).filter(
+    (c) => !c.deleted_at,
+  ).length;
 
-  if (countError) return countError.message;
-  if (count && count > 0) {
-    return `${count} client${
-      count === 1 ? ' is' : 's are'
+  if (assigned > 0) {
+    return `${assigned} client${
+      assigned === 1 ? ' is' : 's are'
     } still assigned to this room. Move them to another room first.`;
   }
 
-  const now = new Date().toISOString();
-  const { error } = await supabase.from('rooms').update({ deleted_at: now }).eq('id', id);
-  if (error) return error.message;
+  const uuid = await queueEntityWrite({
+    table: 'rooms',
+    op: 'update',
+    row_id: id,
+    values: { deleted_at: new Date().toISOString() },
+  });
+  const error = await settleWrite(uuid);
+  if (error) return error;
 
   // Free the router's unique room_id so the room can be recreated cleanly.
-  await supabase
-    .from('routers')
-    .update({ deleted_at: now, room_id: null })
-    .eq('room_id', id)
-    .is('deleted_at', null);
+  const router = (await db.routers.where('room_id').equals(id).toArray()).find(
+    (r) => !r.deleted_at,
+  );
+  if (router) await detachRouter(router.id);
 
-  await pullAll();
   return null;
 }
