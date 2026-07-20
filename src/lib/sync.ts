@@ -5,7 +5,9 @@ import type {
   ConnectionEvent,
   OutboxConnectionEventPayload,
   OutboxItem,
+  OutboxPauseEventPayload,
   OutboxPaymentPayload,
+  PauseEvent,
   Payment,
 } from './types';
 
@@ -20,7 +22,7 @@ export async function pullAll(): Promise<boolean> {
   try {
     const paymentsSince = new Date(Date.now() - SIX_MONTHS_MS).toISOString();
 
-    const [clients, rooms, routers, plans, payments, events, users] =
+    const [clients, rooms, routers, plans, payments, events, pauses, users] =
       await Promise.all([
         supabase.from('clients').select('*').is('deleted_at', null),
         supabase.from('rooms').select('*').is('deleted_at', null),
@@ -32,17 +34,22 @@ export async function pullAll(): Promise<boolean> {
           .select('*')
           .order('performed_at', { ascending: false })
           .limit(500),
+        supabase
+          .from('pause_events')
+          .select('*')
+          .order('performed_at', { ascending: false })
+          .limit(500),
         supabase.from('app_users').select('*'),
       ]);
 
     const anyError =
       clients.error ?? rooms.error ?? routers.error ?? plans.error ??
-      payments.error ?? events.error ?? users.error;
+      payments.error ?? events.error ?? pauses.error ?? users.error;
     if (anyError) throw anyError;
 
     await db.transaction(
       'rw',
-      [db.clients, db.rooms, db.routers, db.plans, db.payments, db.connection_events, db.app_users, db.sync_meta],
+      [db.clients, db.rooms, db.routers, db.plans, db.payments, db.connection_events, db.pause_events, db.app_users, db.sync_meta],
       async () => {
         // Replace-all mirror: server is the source of truth for these tables.
         await db.clients.clear();
@@ -57,6 +64,8 @@ export async function pullAll(): Promise<boolean> {
         await db.payments.bulkPut((payments.data ?? []) as Payment[]);
         await db.connection_events.clear();
         await db.connection_events.bulkPut((events.data ?? []) as ConnectionEvent[]);
+        await db.pause_events.clear();
+        await db.pause_events.bulkPut((pauses.data ?? []) as PauseEvent[]);
         await db.app_users.clear();
         await db.app_users.bulkPut(users.data ?? []);
         await db.sync_meta.put({ key: 'last_synced_at', value: new Date().toISOString() });
@@ -109,6 +118,12 @@ async function pushOutboxItem(item: OutboxItem): Promise<boolean> {
       const p = item.payload as OutboxPaymentPayload;
       const { error } = await supabase
         .from('payments')
+        .upsert(p, { onConflict: 'client_uuid', ignoreDuplicates: true });
+      if (error) serverError = error.message;
+    } else if (item.kind === 'pause_event') {
+      const p = item.payload as OutboxPauseEventPayload;
+      const { error } = await supabase
+        .from('pause_events')
         .upsert(p, { onConflict: 'client_uuid', ignoreDuplicates: true });
       if (error) serverError = error.message;
     } else {
@@ -170,6 +185,48 @@ export async function queueConnectionEvent(
       connection_status: payload.action === 'connect' ? 'connected' : 'disconnected',
       connection_status_updated_at: payload.performed_at,
     });
+  });
+}
+
+/**
+ * Queue a pause/resume and mirror the server trigger locally so the UI is
+ * correct while offline. Flushing is oldest-first, so a pause queued before a
+ * resume replays server-side in the same order and lands on the same expiry.
+ */
+export async function queuePauseEvent(payload: OutboxPauseEventPayload): Promise<void> {
+  await db.transaction('rw', [db.outbox, db.clients], async () => {
+    await db.outbox.add({
+      client_uuid: payload.client_uuid,
+      kind: 'pause_event',
+      payload,
+      status: 'pending',
+      error: null,
+      created_at: new Date().toISOString(),
+      attempts: 0,
+    });
+
+    const client = await db.clients.get(payload.client_id);
+    if (!client) return;
+
+    if (payload.action === 'pause') {
+      if (client.paused_at === null) {
+        await db.clients.update(payload.client_id, { paused_at: payload.performed_at });
+      }
+      return;
+    }
+
+    if (client.paused_at !== null) {
+      const credit = Math.max(
+        0,
+        new Date(payload.performed_at).getTime() - new Date(client.paused_at).getTime(),
+      );
+      await db.clients.update(payload.client_id, {
+        paused_at: null,
+        expires_at: client.expires_at
+          ? new Date(new Date(client.expires_at).getTime() + credit).toISOString()
+          : null,
+      });
+    }
   });
 }
 

@@ -101,6 +101,14 @@ export function DashboardScreen() {
               <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur">
                 {stats.connected} online
               </span>
+              {stats.paused > 0 && (
+                <Link
+                  to="/clients?paused=1"
+                  className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur active:opacity-70"
+                >
+                  {stats.paused} paused
+                </Link>
+              )}
             </div>
           </section>
 
@@ -157,7 +165,7 @@ export function DashboardScreen() {
                         <p className="truncate text-xs text-muted">{formatDate(c.expires_at)}</p>
                       </div>
                     </div>
-                    <ExpiryBadge expiresAt={c.expires_at} />
+                    <ExpiryBadge expiresAt={c.expires_at} pausedAt={c.paused_at} />
                   </Link>
                 </li>
               ))}

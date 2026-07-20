@@ -4,6 +4,7 @@ import type {
   Client,
   ConnectionEvent,
   OutboxItem,
+  PauseEvent,
   Payment,
   Plan,
   Room,
@@ -22,6 +23,7 @@ class PppoeDb extends Dexie {
   plans!: Table<Plan, string>;
   payments!: Table<Payment, string>;
   connection_events!: Table<ConnectionEvent, string>;
+  pause_events!: Table<PauseEvent, string>;
   app_users!: Table<AppUser, string>;
   outbox!: Table<OutboxItem, string>;
   sync_meta!: Table<SyncMeta, string>;
@@ -38,6 +40,12 @@ class PppoeDb extends Dexie {
       app_users: 'id, username',
       outbox: 'client_uuid, status, created_at',
       sync_meta: 'key',
+    });
+
+    // v2: vacation pause. Existing installs keep their cached rows; the next
+    // pull backfills clients.paused_at and populates pause_events.
+    this.version(2).stores({
+      pause_events: 'id, client_id, performed_at, client_uuid',
     });
   }
 }
@@ -59,7 +67,7 @@ export async function setMeta(key: string, value: string): Promise<void> {
 export async function clearLocalCache(): Promise<void> {
   await db.transaction(
     'rw',
-    [db.clients, db.rooms, db.routers, db.plans, db.payments, db.connection_events, db.app_users, db.outbox, db.sync_meta],
+    [db.clients, db.rooms, db.routers, db.plans, db.payments, db.connection_events, db.pause_events, db.app_users, db.outbox, db.sync_meta],
     async () => {
       await Promise.all([
         db.clients.clear(),
@@ -68,6 +76,7 @@ export async function clearLocalCache(): Promise<void> {
         db.plans.clear(),
         db.payments.clear(),
         db.connection_events.clear(),
+        db.pause_events.clear(),
         db.app_users.clear(),
         db.outbox.clear(),
         db.sync_meta.clear(),

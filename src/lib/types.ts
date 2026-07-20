@@ -5,6 +5,7 @@ export type AccountStatus = 'active' | 'suspended' | 'terminated';
 export type ConnectionStatus = 'connected' | 'disconnected';
 export type StatusSource = 'manual' | 'router';
 export type ConnectionAction = 'connect' | 'disconnect';
+export type PauseAction = 'pause' | 'resume';
 
 export interface AppUser {
   readonly id: string;
@@ -64,6 +65,8 @@ export interface Client {
   connection_status_updated_at: string;
   status_source: StatusSource;
   expires_at: string | null;
+  /** Non-null while a vacation pause is open; expires_at is frozen until resume. */
+  paused_at: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -98,11 +101,25 @@ export interface ConnectionEvent {
   updated_at: string;
 }
 
+export interface PauseEvent {
+  readonly id: string;
+  client_id: string;
+  action: PauseAction;
+  performed_by: string | null;
+  performed_at: string;
+  note: string | null;
+  client_uuid: string;
+  /** Seconds of subscription time given back. Stamped by the server on resume. */
+  credited_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------------------------------------------------------------------
 // Outbox (offline writes queued for sync)
 // ---------------------------------------------------------------------------
 
-export type OutboxKind = 'payment' | 'connection_event';
+export type OutboxKind = 'payment' | 'connection_event' | 'pause_event';
 
 export interface OutboxPaymentPayload {
   client_id: string;
@@ -123,13 +140,27 @@ export interface OutboxConnectionEventPayload {
   client_uuid: string;
 }
 
+export interface OutboxPauseEventPayload {
+  client_id: string;
+  action: PauseAction;
+  performed_at: string;
+  note: string | null;
+  performed_by: string | null;
+  client_uuid: string;
+}
+
 export type OutboxStatus = 'pending' | 'failed';
+
+export type OutboxPayload =
+  | OutboxPaymentPayload
+  | OutboxConnectionEventPayload
+  | OutboxPauseEventPayload;
 
 export interface OutboxItem {
   /** client_uuid doubles as the outbox primary key. */
   readonly client_uuid: string;
   kind: OutboxKind;
-  payload: OutboxPaymentPayload | OutboxConnectionEventPayload;
+  payload: OutboxPayload;
   status: OutboxStatus;
   error: string | null;
   created_at: string; // local timestamp

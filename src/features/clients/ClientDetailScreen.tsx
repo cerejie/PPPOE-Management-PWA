@@ -5,16 +5,11 @@ import { ExpiryBadge } from '@/components/ExpiryBadge';
 import { useAuth } from '@/features/auth/AuthContext';
 import { RecordPaymentSheet } from '@/features/payments/RecordPaymentSheet';
 import { toggleConnection } from '@/features/payments/actions';
-import { formatDate, formatDateTime, formatMoney } from '@/lib/format';
-import type { OutboxConnectionEventPayload, OutboxPaymentPayload } from '@/lib/types';
-import {
-  useClient,
-  useClientEvents,
-  useClientOutbox,
-  useClientPayments,
-  usePlans,
-  useRooms,
-} from './hooks';
+import { formatDate, formatDateTime, formatDuration, formatMoney } from '@/lib/format';
+import { useClient, useClientOutbox, usePlans, useRooms } from './hooks';
+import { useClientLedger } from './ledger';
+import { LedgerSheet } from './LedgerSheet';
+import { PauseSheet } from './PauseSheet';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -37,11 +32,12 @@ export function ClientDetailScreen() {
   const client = useClient(id);
   const rooms = useRooms();
   const plans = usePlans();
-  const payments = useClientPayments(id);
-  const events = useClientEvents(id);
   const outbox = useClientOutbox(id);
+  const ledger = useClientLedger(id);
 
   const [showPayment, setShowPayment] = useState(false);
+  const [showLedger, setShowLedger] = useState(false);
+  const [showPause, setShowPause] = useState(false);
   const [toggling, setToggling] = useState(false);
 
   if (client === undefined) {
@@ -55,8 +51,13 @@ export function ClientDetailScreen() {
   const room = rooms?.find((r) => r.id === client.room_id);
   const plan = plans?.find((p) => p.id === client.plan_id);
   const connected = client.connection_status === 'connected';
+  const paused = client.paused_at !== null;
+  const pausedSeconds = paused
+    ? Math.max(0, (Date.now() - new Date(client.paused_at as string).getTime()) / 1000)
+    : 0;
 
-  const pendingPayments = (outbox ?? []).filter((i) => i.kind === 'payment');
+  // Pending payments show inside the ledger drawer; only the connection card
+  // needs its own pending count.
   const pendingEvents = (outbox ?? []).filter((i) => i.kind === 'connection_event');
 
   async function handleToggle() {
@@ -132,6 +133,33 @@ export function ClientDetailScreen() {
           )}
         </section>
 
+        {/* Vacation pause */}
+        <section
+          className={`mt-3 rounded-4xl p-5 shadow-card ${paused ? 'bg-warn-soft' : 'bg-surface'}`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className={`font-bold ${paused ? 'text-warn' : 'text-fg'}`}>
+                {paused ? 'Subscription paused' : 'Subscription running'}
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                {paused
+                  ? `Frozen ${formatDuration(pausedSeconds)} ago — resuming adds that back to the expiry.`
+                  : 'Pause to freeze the remaining days while the room is empty.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPause(true)}
+              className={`min-h-[48px] shrink-0 rounded-2xl px-5 py-3 font-semibold active:opacity-80 ${
+                paused ? 'bg-ok text-white shadow-float' : 'bg-surface-2 text-fg'
+              }`}
+            >
+              {paused ? 'Resume' : 'Pause'}
+            </button>
+          </div>
+        </section>
+
         {/* Profile */}
         <section className="mt-3 rounded-4xl bg-surface px-5 py-1 shadow-card">
           <InfoRow label="Room" value={room?.name ?? '—'} />
@@ -139,9 +167,10 @@ export function ClientDetailScreen() {
           <InfoRow label="Monthly fee" value={formatMoney(client.monthly_fee)} />
           <InfoRow label="Account" value={client.account_status} />
           <div className="flex items-center justify-between gap-3 border-b border-line/60 py-3 last:border-b-0">
-            <span className="text-sm text-muted">Expires</span>
+            <span className="text-sm text-muted">{paused ? 'Expires (frozen)' : 'Expires'}</span>
             <span className="flex items-center gap-2 text-sm font-semibold text-fg">
-              {formatDate(client.expires_at)} <ExpiryBadge expiresAt={client.expires_at} />
+              {formatDate(client.expires_at)}{' '}
+              <ExpiryBadge expiresAt={client.expires_at} pausedAt={client.paused_at} />
             </span>
           </div>
           {client.notes && (
@@ -160,96 +189,64 @@ export function ClientDetailScreen() {
           Record payment
         </button>
 
-        {/* Payment history */}
-        <SectionHeading>Payments</SectionHeading>
-        <section className="overflow-hidden rounded-3xl bg-surface shadow-card">
-          {pendingPayments.map((item) => {
-            const p = item.payload as OutboxPaymentPayload;
-            return (
-              <div
-                key={item.client_uuid}
-                className="flex items-center justify-between gap-3 border-b border-line/60 px-4 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-fg">{formatMoney(p.amount)}</p>
-                  <p className="truncate text-xs text-muted">
-                    {formatDateTime(p.paid_at)} · {p.method ?? '—'}
-                  </p>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    item.status === 'failed'
-                      ? 'bg-danger-soft text-danger'
-                      : 'bg-warn-soft text-warn'
-                  }`}
-                >
-                  {item.status === 'failed' ? 'failed' : 'pending'}
-                </span>
-              </div>
-            );
-          })}
-          {(payments ?? []).length === 0 && pendingPayments.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted">No payments yet.</p>
-          ) : (
-            (payments ?? []).map((p) => (
-              <div
-                key={p.id}
-                className="flex items-center justify-between gap-3 border-b border-line/60 px-4 py-3 last:border-b-0"
-              >
-                <div className="min-w-0">
-                  <p className={`font-semibold ${p.amount < 0 ? 'text-danger' : 'text-fg'}`}>
-                    {formatMoney(p.amount)}
-                  </p>
-                  <p className="truncate text-xs text-muted">
-                    {formatDateTime(p.paid_at)} · {p.method ?? '—'}
-                    {p.note ? ` · ${p.note}` : ''}
-                  </p>
-                </div>
-                {p.covers_to && (
-                  <span className="shrink-0 text-xs text-muted">→ {formatDate(p.covers_to)}</span>
-                )}
-              </div>
-            ))
+        {/* Ledger: payments, connection events and pauses in one timeline. */}
+        <SectionHeading>Ledger</SectionHeading>
+        <button
+          type="button"
+          onClick={() => setShowLedger(true)}
+          className="flex w-full items-center gap-3 rounded-3xl bg-surface px-4 py-4 text-left shadow-card active:bg-surface-2"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-fg">
+              {ledger ? `${ledger.entries.length} entries` : 'Loading…'}
+            </p>
+            <p className="mt-0.5 truncate text-xs text-muted">
+              {ledger
+                ? `${formatMoney(ledger.totalPaid)} paid${
+                    ledger.totalCredited > 0
+                      ? ` · ${formatDuration(ledger.totalCredited)} credited`
+                      : ''
+                  }`
+                : 'Payments, connection events and pauses'}
+            </p>
+          </div>
+          {ledger && ledger.entries.length > 0 && (
+            <span className="shrink-0 text-xs font-semibold text-muted">
+              {formatDateTime(ledger.entries[0]?.at ?? null)}
+            </span>
           )}
-        </section>
-
-        {/* Event history */}
-        <SectionHeading>Connection events</SectionHeading>
-        <section className="overflow-hidden rounded-3xl bg-surface shadow-card">
-          {pendingEvents.map((item) => {
-            const e = item.payload as OutboxConnectionEventPayload;
-            return (
-              <div
-                key={item.client_uuid}
-                className="flex items-center justify-between gap-3 border-b border-line/60 px-4 py-3"
-              >
-                <p className="text-sm font-semibold capitalize text-fg">{e.action}</p>
-                <span className="shrink-0 text-xs text-warn">
-                  pending · {formatDateTime(e.performed_at)}
-                </span>
-              </div>
-            );
-          })}
-          {(events ?? []).length === 0 && pendingEvents.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted">No events yet.</p>
-          ) : (
-            (events ?? []).map((e) => (
-              <div
-                key={e.id}
-                className="flex items-center justify-between gap-3 border-b border-line/60 px-4 py-3 last:border-b-0"
-              >
-                <p className="text-sm font-semibold capitalize text-fg">{e.action}</p>
-                <span className="shrink-0 text-xs text-muted">
-                  {formatDateTime(e.performed_at)}
-                </span>
-              </div>
-            ))
-          )}
-        </section>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            className="shrink-0 text-muted/60"
+            aria-hidden
+          >
+            <path
+              d="M9 5l7 7-7 7"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </Screen>
 
       {showPayment && (
         <RecordPaymentSheet client={client} plan={plan} onClose={() => setShowPayment(false)} />
+      )}
+
+      {showPause && <PauseSheet client={client} onClose={() => setShowPause(false)} />}
+
+      {showLedger && (
+        <LedgerSheet
+          client={client}
+          room={room}
+          plan={plan}
+          onClose={() => setShowLedger(false)}
+        />
       )}
     </>
   );
