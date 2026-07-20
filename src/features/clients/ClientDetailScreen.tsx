@@ -169,7 +169,7 @@ export function ClientDetailScreen() {
                 paused ? 'bg-ok text-white shadow-float' : 'bg-surface-2 text-fg'
               }`}
             >
-              {paused ? 'Resume & connect' : 'Pause'}
+              {paused ? 'Resume' : 'Pause'}
             </button>
           </div>
         </section>
