@@ -17,4 +17,5 @@ supabase/.branches
 supabase/.temp
 
 
-graphify-out
+# Graphify
+graphify-out/**
