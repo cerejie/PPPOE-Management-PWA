@@ -10,8 +10,20 @@ import {
 } from '@/components/formStyles';
 import { isPlanOfferable } from '@/features/plans/actions';
 import { useOnline } from '@/features/sync/useSyncStatus';
+import {
+  formatDate,
+  fromDateInputStart,
+  toDateInputValue,
+  todayInputValue,
+} from '@/lib/format';
 import type { AccountStatus } from '@/lib/types';
-import { createClient, softDeleteClient, updateClient, type ClientInput } from './actions';
+import {
+  createClient,
+  initialExpiry,
+  softDeleteClient,
+  updateClient,
+  type ClientInput,
+} from './actions';
 import { useClient, usePlans, useRooms, useRouters } from './hooks';
 
 const ACCOUNT_STATUSES: AccountStatus[] = ['active', 'suspended', 'terminated'];
@@ -28,7 +40,7 @@ export function ClientFormScreen() {
   const routers = useRouters();
   const plans = usePlans();
 
-  const [form, setForm] = useState<ClientInput>({
+  const [form, setForm] = useState<ClientInput>(() => ({
     full_name: '',
     pppoe_username: '',
     room_id: null,
@@ -36,8 +48,9 @@ export function ClientFormScreen() {
     plan_id: null,
     monthly_fee: 0,
     account_status: 'active',
+    installed_at: fromDateInputStart(todayInputValue()),
     notes: null,
-  });
+  }));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -52,6 +65,7 @@ export function ClientFormScreen() {
         plan_id: existing.plan_id,
         monthly_fee: existing.monthly_fee,
         account_status: existing.account_status,
+        installed_at: existing.installed_at,
         notes: existing.notes,
       });
     }
@@ -63,6 +77,12 @@ export function ClientFormScreen() {
     () => (plans ?? []).filter((p) => isPlanOfferable(p) || p.id === form.plan_id),
     [plans, form.plan_id],
   );
+
+  const durationDays =
+    plans?.find((p) => p.id === form.plan_id)?.duration_days ?? 30;
+  // Only creation derives the expiry from the install date, so only creation
+  // previews it. On an existing client expires_at has moved on with payments.
+  const seededExpiry = isEdit ? null : initialExpiry(form.installed_at, durationDays);
 
   function set<K extends keyof ClientInput>(key: K, value: ClientInput[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -186,6 +206,26 @@ export function ClientFormScreen() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label htmlFor="installed_at" className={labelClass}>
+              Date installed
+            </label>
+            <input
+              id="installed_at"
+              type="date"
+              value={toDateInputValue(form.installed_at)}
+              onChange={(e) => set('installed_at', fromDateInputStart(e.target.value))}
+              className={fieldClass}
+            />
+            {!isEdit && (
+              <p className="mt-1.5 text-xs text-muted">
+                {seededExpiry
+                  ? `First expiry: ${formatDate(seededExpiry)} (${durationDays} days).`
+                  : 'Leave empty to start with no expiry until the first payment.'}
+              </p>
+            )}
           </div>
 
           <div>

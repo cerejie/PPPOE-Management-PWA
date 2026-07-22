@@ -60,6 +60,11 @@ export function newUuid(): string {
   return crypto.randomUUID();
 }
 
+/** ISO timestamp `days` later. */
+export function addDays(iso: string, days: number): string {
+  return new Date(new Date(iso).getTime() + days * 86_400_000).toISOString();
+}
+
 // --- <input type="date"> bridging ------------------------------------------
 // The DB stores timestamptz; the control speaks local "YYYY-MM-DD".
 
@@ -82,4 +87,23 @@ export function fromDateInputValue(value: string): string | null {
   const [year, month, day] = value.split('-').map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
+}
+
+/**
+ * Date input value -> ISO timestamp at the START of that local day.
+ *
+ * The right end for a date that anchors a subscription period (paid on,
+ * installed on): picking today lands before now, so the server's
+ * `least(paid_at, now())` cap never trims it and the previewed expiry is
+ * exactly the one the trigger computes.
+ */
+export function fromDateInputStart(value: string): string | null {
+  if (!value) return null;
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day).toISOString();
+}
+
+export function todayInputValue(): string {
+  return toDateInputValue(new Date().toISOString());
 }

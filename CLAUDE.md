@@ -95,10 +95,16 @@ function in `sync.ts` per trigger (`mirrorPayment` ↔ `apply_payment_to_client`
 pause trigger) — purely so offline UI is correct. That duplication is
 intentional, not a bug: change a trigger and you must change its mirror.
 
-`mirrorPayment` extends from `paid_at` while the trigger extends from `now()` at
-insert time, so a payment queued offline for days lands slightly earlier locally
-than server-side. The pull after a successful flush overwrites it; do not try to
-"fix" this by guessing the flush time.
+A payment's period starts at `least(paid_at, coalesce(paused_at, now()))` — the
+day the money was collected, capped at now so a future date buys nothing, and
+frozen at `paused_at` so a payment taken mid-vacation cannot swallow the window
+resume is about to credit back. `nextExpiry()` in `sync.ts` is that arithmetic;
+`mirrorPayment` and the payment form's expiry preview both call it, so the three
+cannot drift from the trigger.
+
+`clients.installed_at` is ordinary profile data, not derived: it seeds
+`expires_at` once in `createClient` so a new client is not born with "no expiry".
+Editing it later must not touch `expires_at`, which by then belongs to payments.
 
 `payments` has no update/delete RLS policy by design; a correction is a new row
 with a negative amount.

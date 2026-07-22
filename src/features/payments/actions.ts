@@ -11,6 +11,9 @@ import type { ConnectionAction } from '@/lib/types';
 export async function recordPayment(input: {
   clientId: string;
   amount: number;
+  /** When the money was collected. Drives the expiry extension, so a payment
+   *  entered late still covers the period it was actually for. */
+  paidAt: string;
   method: string | null;
   note: string | null;
   recordedBy: string | null;
@@ -18,7 +21,7 @@ export async function recordPayment(input: {
   await queuePayment({
     client_id: input.clientId,
     amount: input.amount,
-    paid_at: new Date().toISOString(),
+    paid_at: input.paidAt,
     method: input.method,
     note: input.note,
     recorded_by: input.recordedBy,

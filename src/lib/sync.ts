@@ -205,15 +205,33 @@ function outboxItem<K extends OutboxKind>(
 }
 
 /**
- * Mirror of apply_payment_to_client(): extend expires_at from
- * max(current expiry, payment time) by the plan's duration, falling back to a
- * 30-day cycle when the client has no plan. Corrections (amount <= 0) never
- * extend, exactly as the trigger does.
+ * Where a positive payment moves expires_at — the arithmetic half of
+ * apply_payment_to_client(), split out so the payment form can preview the
+ * exact date the trigger will land on instead of approximating it.
  *
- * The server extends from now() at *insert* time while this uses paid_at, so a
- * payment queued offline for days lands a few days earlier locally than it
- * will server-side. The pull that follows a successful flush overwrites this
- * with the server's value, so the divergence never outlives the sync.
+ * The period starts at the payment's own clock: `paid_at`, capped at now so a
+ * date typed ahead cannot buy time that has not passed, and frozen at
+ * `paused_at` while a vacation pause is open so the payment cannot swallow the
+ * window that resume is about to credit back.
+ */
+export function nextExpiry(input: {
+  expiresAt: string | null;
+  pausedAt: string | null;
+  paidAt: string;
+  durationDays: number;
+}): string {
+  const clock = Math.min(
+    new Date(input.paidAt).getTime(),
+    input.pausedAt ? new Date(input.pausedAt).getTime() : Date.now(),
+  );
+  const from = Math.max(input.expiresAt ? new Date(input.expiresAt).getTime() : clock, clock);
+  return new Date(from + input.durationDays * DAY_MS).toISOString();
+}
+
+/**
+ * Mirror of apply_payment_to_client(). Falls back to a 30-day cycle when the
+ * client has no plan, and corrections (amount <= 0) never extend — exactly as
+ * the trigger does.
  */
 async function mirrorPayment(p: OutboxPaymentPayload): Promise<void> {
   if (p.amount <= 0) return;
@@ -222,14 +240,14 @@ async function mirrorPayment(p: OutboxPaymentPayload): Promise<void> {
   if (!client) return;
 
   const plan = client.plan_id ? await db.plans.get(client.plan_id) : undefined;
-  const durationDays = plan?.duration_days ?? 30;
-  const from = Math.max(
-    client.expires_at ? new Date(client.expires_at).getTime() : 0,
-    new Date(p.paid_at).getTime(),
-  );
 
   await db.clients.update(p.client_id, {
-    expires_at: new Date(from + durationDays * DAY_MS).toISOString(),
+    expires_at: nextExpiry({
+      expiresAt: client.expires_at,
+      pausedAt: client.paused_at,
+      paidAt: p.paid_at,
+      durationDays: plan?.duration_days ?? 30,
+    }),
   });
 }
 

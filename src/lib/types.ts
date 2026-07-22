@@ -64,6 +64,8 @@ export interface Client {
   connection_status: ConnectionStatus;
   connection_status_updated_at: string;
   status_source: StatusSource;
+  /** Install date. Seeds the first expires_at at creation; a record afterwards. */
+  installed_at: string | null;
   expires_at: string | null;
   /** Non-null while a vacation pause is open; expires_at is frozen until resume. */
   paused_at: string | null;
@@ -127,6 +129,7 @@ export type EntityTable = 'clients' | 'rooms' | 'routers' | 'plans';
 export interface OutboxPaymentPayload {
   client_id: string;
   amount: number;
+  /** When the money was collected — often earlier than when it was entered. */
   paid_at: string;
   method: string | null;
   note: string | null;

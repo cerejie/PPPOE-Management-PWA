@@ -180,6 +180,7 @@ export function ClientDetailScreen() {
           <InfoRow label="Plan" value={planValue} />
           <InfoRow label="Monthly fee" value={formatMoney(client.monthly_fee)} />
           <InfoRow label="Account" value={client.account_status} />
+          <InfoRow label="Installed" value={formatDate(client.installed_at)} />
           <div className="flex items-center justify-between gap-3 border-b border-line/60 py-3 last:border-b-0">
             <span className="text-sm text-muted">{paused ? 'Expires (frozen)' : 'Expires'}</span>
             <span className="flex items-center gap-2 text-sm font-semibold text-fg">
@@ -249,7 +250,7 @@ export function ClientDetailScreen() {
       </Screen>
 
       {showPayment && (
-        <RecordPaymentSheet client={client} plan={plan} onClose={() => setShowPayment(false)} />
+        <RecordPaymentSheet client={client} onClose={() => setShowPayment(false)} />
       )}
 
       {showPause && <PauseSheet client={client} onClose={() => setShowPause(false)} />}
