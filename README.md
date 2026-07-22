@@ -66,13 +66,13 @@ Staff sign in with just their **username** — the app maps it to
 ## Development
 
 ```sh
-npm install
-npm run dev        # dev server
-npm run build      # typecheck + production build (generates the service worker)
-npm run preview    # serve the production build (use this to test PWA/offline)
+yarn install
+yarn dev        # dev server
+yarn build      # typecheck + production build (generates the service worker)
+yarn preview    # serve the production build (use this to test PWA/offline)
 ```
 
-To test offline behaviour: `npm run build && npm run preview`, open in a
+To test offline behaviour: `yarn build && yarn preview`, open in a
 mobile browser, install to home screen, then toggle airplane mode. Payments
 and connect/disconnect actions made offline are queued in the outbox
 (header chip shows `N pending`) and sync automatically on reconnect.
@@ -80,20 +80,26 @@ Failed items appear in the Sync screen (tap the header chip) for review.
 
 ## Structure
 
+Hybrid type-based: top level is the technical type, second level is the
+business module (`clients`, `payments`, `plans`, `rooms`, `sync`, `auth`).
+
 ```
 supabase/
   migrations/           # schema, triggers + helper functions, RLS
   functions/create-staff/  # SuperAdmin-only staff account creation
 src/
-  lib/                  # supabase client, Dexie schema, sync engine, formatting
-  features/
-    auth/               # login, session/role context, settings
-    clients/            # dashboard, list, detail, admin form
-    payments/           # record-payment sheet + write actions
-    rooms/              # rooms tab
-    sync/               # status chip, sync queue screen, hooks
-  components/           # Screen chrome, TabBar, badges
+  api/                  # common/ (supabase client, Dexie schema), sync/ (sync engine)
+  components/           # common/ (Screen, Sheet, TabBar, badges) + <module>/sheets/
+  pages/                # <module>/<Name>Screen.tsx — dashboard, list, detail, forms
+  hooks/                # <module>/use<Thing>.ts
+  services/             # <module>/<module>.actions.ts — all writes for that module
+  store/                # auth/AuthContext.tsx — session/role context
+  types/                # <module>/<module>.types.ts
+  utils/                # common/format.ts, clients/ledgerPdf.ts
+  styles/               # common/formStyles.ts
 ```
+
+See [CLAUDE.md](CLAUDE.md) for the full architecture and conventions.
 
 ## Design notes / seams for later
 

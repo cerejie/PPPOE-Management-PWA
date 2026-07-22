@@ -1,16 +1,16 @@
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
-import { useAuth } from '@/features/auth/AuthContext';
-import { LoginScreen } from '@/features/auth/LoginScreen';
-import { SettingsScreen } from '@/features/auth/SettingsScreen';
-import { DashboardScreen } from '@/features/clients/DashboardScreen';
-import { ClientsScreen } from '@/features/clients/ClientsScreen';
-import { ClientDetailScreen } from '@/features/clients/ClientDetailScreen';
-import { ClientFormScreen } from '@/features/clients/ClientFormScreen';
-import { RoomsScreen } from '@/features/rooms/RoomsScreen';
-import { PlansScreen } from '@/features/plans/PlansScreen';
-import { SyncScreen } from '@/features/sync/SyncScreen';
-import { useBackgroundSync } from '@/features/sync/useSyncStatus';
-import { TabBar } from '@/components/TabBar';
+import { useAuth } from '@/store/auth/AuthContext';
+import { LoginScreen } from '@/pages/auth/LoginScreen';
+import { SettingsScreen } from '@/pages/auth/SettingsScreen';
+import { DashboardScreen } from '@/pages/clients/DashboardScreen';
+import { ClientsScreen } from '@/pages/clients/ClientsScreen';
+import { ClientDetailScreen } from '@/pages/clients/ClientDetailScreen';
+import { ClientFormScreen } from '@/pages/clients/ClientFormScreen';
+import { RoomsScreen } from '@/pages/rooms/RoomsScreen';
+import { PlansScreen } from '@/pages/plans/PlansScreen';
+import { SyncScreen } from '@/pages/sync/SyncScreen';
+import { useBackgroundSync } from '@/hooks/sync/useSyncStatus';
+import { TabBar } from '@/components/common/layout/TabBar';
 
 function AuthenticatedShell() {
   useBackgroundSync();
