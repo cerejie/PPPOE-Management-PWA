@@ -57,6 +57,10 @@ export async function setMeta(key: string, value: string): Promise<void> {
   await db.sync_meta.put({ key, value });
 }
 
+export async function deleteMeta(key: string): Promise<void> {
+  await db.sync_meta.delete(key);
+}
+
 /** Wipe all cached data (used on logout). */
 export async function clearLocalCache(): Promise<void> {
   await db.transaction(

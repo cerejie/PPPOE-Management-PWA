@@ -6,6 +6,9 @@ export type StatusSource = 'manual' | 'router';
 export type ConnectionAction = 'connect' | 'disconnect';
 export type PauseAction = 'pause' | 'resume';
 
+/** The three row types a client's ledger merges, and can delete individually. */
+export type LedgerKind = 'payment' | 'connection' | 'pause';
+
 export interface Client {
   readonly id: string;
   full_name: string;

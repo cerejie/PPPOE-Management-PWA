@@ -45,7 +45,7 @@ function useRoomRows(): RoomRow[] | undefined {
   }, []);
 }
 
-type Editing = { room: Room; routerLabel: string } | 'new' | null;
+type Editing = { room: Room; routerLabel: string; clientCount: number } | 'new' | null;
 
 interface ChipProps {
   active: boolean;
@@ -201,7 +201,7 @@ export function RoomsScreen() {
                 {isSuperAdmin && (
                   <button
                     type="button"
-                    onClick={() => setEditing({ room, routerLabel })}
+                    onClick={() => setEditing({ room, routerLabel, clientCount })}
                     aria-label={`Edit ${room.name}`}
                     className="flex h-11 w-11 shrink-0 items-center justify-center text-muted active:opacity-60"
                   >
@@ -229,6 +229,7 @@ export function RoomsScreen() {
         <RoomFormSheet
           room={editing.room}
           routerLabel={editing.routerLabel}
+          clientCount={editing.clientCount}
           onClose={() => setEditing(null)}
         />
       )}

@@ -10,7 +10,7 @@ import {
   selectClass,
 } from '@/styles/common/formStyles';
 import { isPlanOfferable } from '@/services/plans/plans.actions';
-import { useOnline } from '@/hooks/sync/useSyncStatus';
+import { OfflineNotice } from '@/components/common/notices/OfflineNotice';
 import {
   formatDate,
   fromDateInputStart,
@@ -21,7 +21,7 @@ import type { AccountStatus } from '@/types/clients/clients.types';
 import {
   createClient,
   initialExpiry,
-  softDeleteClient,
+  deleteClient,
   updateClient,
   type ClientInput,
 } from '@/services/clients/clients.actions';
@@ -32,12 +32,15 @@ import { useRouters } from '@/hooks/rooms/useRouters';
 
 const ACCOUNT_STATUSES: AccountStatus[] = ['active', 'suspended', 'terminated'];
 
-/** SuperAdmin-only create/edit form. Online-only by design. */
+/**
+ * SuperAdmin-only create/edit form. Works offline: the row is written to Dexie
+ * with a device-generated id and queued in the outbox, so the new client is
+ * navigable immediately and reaches Supabase on the next flush.
+ */
 export function ClientFormScreen() {
   const { id } = useParams<{ id: string }>();
   const isEdit = id !== undefined;
   const navigate = useNavigate();
-  const online = useOnline();
 
   const existing = useClient(id);
   const rooms = useRooms();
@@ -109,7 +112,7 @@ export function ClientFormScreen() {
   async function handleDelete() {
     if (!id) return;
     setBusy(true);
-    const err = await softDeleteClient(id);
+    const err = await deleteClient(id);
     setBusy(false);
     setConfirmingDelete(false);
     if (err) {
@@ -132,11 +135,10 @@ export function ClientFormScreen() {
   return (
     <>
       <Screen title={isEdit ? 'Edit client' : 'New client'} back>
-        {!online && (
-          <p className="mb-4 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-            Client editing needs a connection. Go online and try again.
-          </p>
-        )}
+        <OfflineNotice
+          className="mb-4"
+          message="this client is saved on the device and synced automatically later."
+        />
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -286,18 +288,18 @@ export function ClientFormScreen() {
             </p>
           )}
 
-          <button type="submit" disabled={busy || !online} className={primaryButtonClass}>
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add client'}
           </button>
 
           {isEdit && (
             <button
               type="button"
-              disabled={busy || !online}
+              disabled={busy}
               onClick={() => setConfirmingDelete(true)}
               className={dangerButtonClass}
             >
-              Remove client
+              Delete client
             </button>
           )}
         </form>
@@ -305,9 +307,9 @@ export function ClientFormScreen() {
 
       {confirmingDelete && (
         <ConfirmDialog
-          title="Remove client?"
-          message="They will be hidden from the app, but their payment and connection history is kept."
-          confirmLabel="Remove"
+          title="Delete client?"
+          message="The client is deleted along with their payments, connection events and pauses. This frees their PPPoE username so it can be used again. It cannot be undone."
+          confirmLabel="Delete"
           busy={busy}
           onConfirm={() => void handleDelete()}
           onCancel={() => setConfirmingDelete(false)}

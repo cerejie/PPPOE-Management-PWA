@@ -45,7 +45,7 @@ Anything shared by more than one module lives in that type's `common/` folder.
 
 ```
 src/api/        — transport. common/ (supabaseClient, Dexie db), sync/ (syncEngine)
-src/components/ — common/{layout,overlays,badges,buttons}, then <module>/sheets/
+src/components/ — common/{layout,overlays,badges,buttons,inputs,notices}, then <module>/sheets/
 src/pages/      — <module>/<Name>Screen.tsx — full-page routes only
 src/hooks/      — <module>/use<Thing>.ts — one hook file per topic
 src/services/   — <module>/<module>.actions.ts — all writes for that module
@@ -97,6 +97,19 @@ Reads and writes use different paths, deliberately:
 - Sync mirrors 6 months of payments and the newest 500 rows per event table.
   Any "full history" view must surface a truncation warning, as
   `hooks/clients/useClientLedger.ts` does.
+- **Every feature works offline except signing in and creating a staff
+  account** — those two need the auth server, and nothing else does. A form
+  must never be disabled on `!online`; its write is queueable, so show
+  `components/common/notices/OfflineNotice.tsx` and let the submit through.
+- Auth survives going offline: `getSession()` returns null once the access
+  token expires and the refresh cannot reach the server, so `AuthContext`
+  falls back to `sync_meta.auth_user_id` (the last user this device signed in
+  as) and keeps the app usable. `authenticated`, not `session`, is what gates
+  the router. Only a Supabase `SIGNED_OUT` event — the server actually
+  rejecting the token — clears that marker and returns to the login screen.
+- Sign-out is blocked while offline. It flushes the outbox, then wipes the
+  local cache; offline it could neither push those writes nor revoke the
+  token, so it would silently destroy queued work.
 - Transient failure → item stays `pending` and auto-retries. Server rejection
   (e.g. RLS) → `failed`, kept for manual review in the Sync screen, never
   auto-retried and never dropped.
@@ -125,8 +138,43 @@ cannot drift from the trigger.
 `expires_at` once in `createClient` so a new client is not born with "no expiry".
 Editing it later must not touch `expires_at`, which by then belongs to payments.
 
-`payments` has no update/delete RLS policy by design; a correction is a new row
-with a negative amount.
+`payments` has no update policy; a correction is a new row with a negative
+amount. It **is** deletable by a SuperAdmin (migration 0007), and so are
+connection and pause events — for a row entered wrongly, where a correction
+would leave the mistake on the statement forever.
+
+Every delete reverses what its insert did, and each reversal has a trigger and a
+local mirror that must change together, exactly like the `apply*`/`mirror*`
+pairs above:
+
+- `reverse_payment_on_client` ↔ `mirrorPaymentDelete` — subtracts
+  `covers_to - covers_from`, the window stamped on the row itself, so the
+  reversal is exact rather than a re-derived guess.
+- `reverse_pause_event` ↔ `mirrorPauseDelete` — a deleted resume gives back
+  `credited_seconds` and re-opens the pause it closed.
+- `reverse_connection_event` ↔ `mirrorConnectionDelete` — recomputes status from
+  the newest surviving event, so deleting a non-newest row changes nothing.
+
+A ledger row still in the outbox has no server row to delete: it is dropped
+locally by `discardQueuedClientEvent`, which restores the derived-state snapshot
+(`OutboxItem.undo`) taken before the *earliest* queued event for that client and
+replays the rest. Restoring the discarded item's own snapshot would double-count
+everything queued before it.
+
+**Clients are hard-deleted, not soft-deleted** (migration 0008). `pppoe_username`
+is UNIQUE across all rows, so a soft-deleted client held its username forever and
+re-adding the same subscriber failed on the constraint. The delete cascades to
+payments, connection events and pause events server-side, and
+`mirrorClientDelete` does the same in Dexie. `audit_log` keeps a jsonb copy of
+every row removed. Rooms, routers and plans still soft-delete — they have no
+unique natural key and nothing to free.
+
+A payment with `amount > 0` also queues a `connect` event ("Auto: payment
+received"), and `sweepExpiredClients` disconnects anyone past `expires_at` on
+app open, hourly, and after each pull. There is no server-side scheduler — the
+sweep is the app's catch-up, which is why it must stay idempotent: it only
+touches clients that are currently `connected`, so a swept client is skipped
+next time.
 
 ## Conventions
 
@@ -162,4 +210,14 @@ Verified consistent across the codebase; follow these for new code.
 - Never emit `₱` into a PDF: jsPDF's Helvetica has no glyph for it. Use the
   `PHP `-prefixed helper in `ledgerPdf.ts`.
 - Never treat a paused client as expiring — a pause freezes the clock, so
-  paused clients are excluded from expiry filters and dashboard counts.
+  paused clients are excluded from expiry filters, dashboard counts, and
+  `sweepExpiredClients`.
+- Never make the tab bar `position: fixed` again. It is the last row of the
+  shell's `h-dvh` flex column in `App.tsx`; as a fixed element it drifted on an
+  installed iOS PWA, where `env(safe-area-inset-bottom)` settles only after a
+  re-layout. `Screen` uses `min-h-full` for the same reason — the shell owns the
+  viewport height.
+- Never allow `app_users.username` to be edited. The login email is derived from
+  it (`usernameToEmail`), so changing it locks the account out; only
+  `display_name` is writable, enforced again server-side by
+  `guard_app_user_self_update()`.

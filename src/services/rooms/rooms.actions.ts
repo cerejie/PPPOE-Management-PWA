@@ -114,21 +114,33 @@ async function detachRouter(routerId: string): Promise<string | null> {
 }
 
 /**
- * Soft-delete a room. Refused while clients are still assigned to it, so we
- * never leave a client pointing at a room that no read path can resolve.
+ * Soft-delete a room, unassigning any clients still in it.
  *
- * The count comes from the local mirror, which offline is the only source
+ * Clients change rooms often, so a room's occupants are not a reason to keep
+ * the room itself alive — but they must not be left pointing at a room no read
+ * path can resolve, which would strand them out of the rooms list. Unassigning
+ * comes first for that reason, and each step is its own outbox write so the
+ * whole operation replays in the same order when it syncs.
+ *
+ * Counts and rows come from the local mirror, which offline is the only source
  * available — and online is equivalent, since clients are mirrored in full.
  */
 export async function softDeleteRoom(id: string): Promise<string | null> {
   const assigned = (await db.clients.where('room_id').equals(id).toArray()).filter(
     (c) => !c.deleted_at,
-  ).length;
+  );
 
-  if (assigned > 0) {
-    return `${assigned} client${
-      assigned === 1 ? ' is' : 's are'
-    } still assigned to this room. Move them to another room first.`;
+  for (const client of assigned) {
+    const uuid = await queueEntityWrite({
+      table: 'clients',
+      op: 'update',
+      row_id: client.id,
+      // router_id goes with the room: the room's router is detached below, so
+      // keeping it would leave the client pointing at a deleted router.
+      values: { room_id: null, router_id: null, updated_at: new Date().toISOString() },
+    });
+    const error = await settleWrite(uuid);
+    if (error) return `Could not unassign ${client.full_name}: ${error}`;
   }
 
   const uuid = await queueEntityWrite({

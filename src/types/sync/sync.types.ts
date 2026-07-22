@@ -1,11 +1,37 @@
 // Outbox (offline writes queued for sync).
 
-import type { ConnectionAction, PauseAction } from '@/types/clients/clients.types';
+import type {
+  ConnectionAction,
+  ConnectionStatus,
+  PauseAction,
+} from '@/types/clients/clients.types';
+
+/** The client columns a queued event's optimistic mirror can move. */
+export interface ClientDerivedState {
+  expires_at: string | null;
+  paused_at: string | null;
+  connection_status: ConnectionStatus;
+  connection_status_updated_at: string;
+}
 
 export type OutboxKind = 'payment' | 'connection_event' | 'pause_event' | 'entity_write';
 
-/** Tables whose SuperAdmin CRUD can be queued offline. */
-export type EntityTable = 'clients' | 'rooms' | 'routers' | 'plans';
+/**
+ * Tables whose SuperAdmin CRUD can be queued offline.
+ *
+ * The three event tables are here only for deletes — their inserts go through
+ * the dedicated payment/connection/pause kinds, which carry the idempotency key
+ * the server's onConflict clause needs.
+ */
+export type EntityTable =
+  | 'clients'
+  | 'rooms'
+  | 'routers'
+  | 'plans'
+  | 'payments'
+  | 'connection_events'
+  | 'pause_events'
+  | 'app_users';
 
 export interface OutboxPaymentPayload {
   client_id: string;
@@ -37,19 +63,21 @@ export interface OutboxPauseEventPayload {
 }
 
 /**
- * A queued create/edit/soft-delete of a domain row.
+ * A queued create/edit/delete of a domain row.
  *
  * `row_id` is generated on the device, so an offline-created row has its real
  * primary key immediately and other offline rows can reference it. For an
  * insert, `values` is the complete row (including `id`); for an update it is a
- * patch — a soft delete is just a patch setting `deleted_at`.
+ * patch — a soft delete of a client or room is just a patch setting
+ * `deleted_at`. `op: 'delete'` is the hard delete used on ledger rows, which
+ * have no `deleted_at` and are removed outright.
  */
 export interface OutboxEntityPayload {
   table: EntityTable;
-  op: 'insert' | 'update';
+  op: 'insert' | 'update' | 'delete';
   row_id: string;
-  /** A full domain row (insert) or a patch of one (update), matching `table`. */
-  values: object;
+  /** A full domain row (insert) or a patch of one (update); absent on delete. */
+  values?: object;
   client_uuid: string;
 }
 
@@ -68,6 +96,13 @@ interface OutboxItemBase {
   error: string | null;
   created_at: string; // local timestamp
   attempts: number;
+  /**
+   * The client's derived state immediately before this item's mirror was
+   * applied. Set on the three event kinds only, and read when a queued event is
+   * discarded before it ever reaches the server: there is no server row to
+   * delete in that case, so the optimistic effect has to be unwound from here.
+   */
+  undo?: ClientDerivedState;
 }
 
 /**

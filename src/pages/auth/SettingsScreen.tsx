@@ -7,6 +7,8 @@ import { fieldClass, labelClass, secondaryButtonClass } from '@/styles/common/fo
 import { db } from '@/api/common/db';
 import { supabase } from '@/api/common/supabaseClient';
 import { pullAll } from '@/api/sync/syncEngine';
+import { renameUser } from '@/services/auth/auth.actions';
+import type { AppUser } from '@/types/auth/auth.types';
 import { useOnline } from '@/hooks/sync/useSyncStatus';
 import { useAuth } from '@/store/auth/AuthContext';
 
@@ -16,6 +18,98 @@ function SectionCard({ title, children }: { title: string; children: ReactNode }
       <h2 className="mb-4 text-base font-bold tracking-tight text-fg">{title}</h2>
       {children}
     </section>
+  );
+}
+
+/**
+ * Inline rename. Only display_name is editable anywhere in the app — the
+ * username derives the login email, so changing it would lock the account out.
+ */
+function NameEditor({
+  user,
+  onDone,
+}: {
+  user: AppUser;
+  onDone: () => void;
+}) {
+  const [value, setValue] = useState(user.display_name);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const err = await renameUser(user.id, value);
+    setBusy(false);
+    if (err) {
+      setError(err);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex-1">
+      <label htmlFor={`name-${user.id}`} className="sr-only">
+        Display name for @{user.username}
+      </label>
+      <input
+        id={`name-${user.id}`}
+        type="text"
+        required
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className={fieldClass}
+      />
+
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-2 flex gap-2">
+        <button
+          type="submit"
+          disabled={busy}
+          className="min-h-[40px] flex-1 rounded-xl bg-accent-gradient px-4 text-sm font-semibold text-white active:opacity-70 disabled:opacity-50"
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={onDone}
+          className="min-h-[40px] flex-1 rounded-xl bg-surface-2 px-4 text-sm font-semibold text-muted active:opacity-70"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Pencil affordance shared by the profile card and each staff row. */
+function EditNameButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted active:bg-surface-2"
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M4 20h4l10-10-4-4L4 16v4z"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
 
@@ -63,6 +157,7 @@ function StaffSection() {
     return users.sort((a, b) => a.display_name.localeCompare(b.display_name));
   }, []);
 
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
@@ -113,16 +208,26 @@ function StaffSection() {
               key={u.id}
               className="flex items-center justify-between gap-3 border-b border-line/60 py-3 last:border-b-0"
             >
-              <div className="min-w-0">
-                <p className="truncate font-semibold text-fg">{u.display_name}</p>
-                <p className="truncate text-xs text-muted">
-                  @{u.username} · {u.role}
-                </p>
-              </div>
-              {!u.is_active && (
-                <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-semibold text-danger">
-                  inactive
-                </span>
+              {renaming === u.id ? (
+                <NameEditor user={u} onDone={() => setRenaming(null)} />
+              ) : (
+                <>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-fg">{u.display_name}</p>
+                    <p className="truncate text-xs text-muted">
+                      @{u.username} · {u.role}
+                    </p>
+                  </div>
+                  {!u.is_active && (
+                    <span className="shrink-0 rounded-full bg-danger-soft px-2.5 py-1 text-[11px] font-semibold text-danger">
+                      inactive
+                    </span>
+                  )}
+                  <EditNameButton
+                    label={`Rename ${u.display_name}`}
+                    onClick={() => setRenaming(u.id)}
+                  />
+                </>
               )}
             </li>
           ))}
@@ -178,6 +283,13 @@ function StaffSection() {
           />
         </div>
 
+        {!online && (
+          <p className="rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
+            You&apos;re offline — creating a staff account is the one change that cannot be
+            queued, because the login itself is created on the server.
+          </p>
+        )}
+
         {error && (
           <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
             {error}
@@ -201,6 +313,8 @@ export function SettingsScreen() {
   const { appUser, signOut, isSuperAdmin } = useAuth();
   const online = useOnline();
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [editingOwnName, setEditingOwnName] = useState(false);
 
   const initials = (appUser?.display_name ?? '?')
     .split(' ')
@@ -220,22 +334,29 @@ export function SettingsScreen() {
           >
             {initials}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-lg font-bold text-fg">{appUser?.display_name}</p>
-            <p className="truncate text-sm text-muted">
-              @{appUser?.username} · {appUser?.role}
-            </p>
-          </div>
+
+          {appUser && editingOwnName ? (
+            <NameEditor user={appUser} onDone={() => setEditingOwnName(false)} />
+          ) : (
+            <>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-lg font-bold text-fg">{appUser?.display_name}</p>
+                <p className="truncate text-sm text-muted">
+                  @{appUser?.username} · {appUser?.role}
+                </p>
+              </div>
+              {appUser && (
+                <EditNameButton
+                  label="Edit your display name"
+                  onClick={() => setEditingOwnName(true)}
+                />
+              )}
+            </>
+          )}
         </section>
 
         {isSuperAdmin && (
           <>
-            {!online && (
-              <p className="mt-4 rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-                Settings changes need a connection.
-              </p>
-            )}
-
             <SectionCard title="Manage">
               <ManageLink to="/rooms" label="Rooms" hint="Add, rename or remove rooms & routers" />
               <ManageLink to="/plans" label="Plans" hint="Price, speed and validity" />
@@ -248,19 +369,36 @@ export function SettingsScreen() {
 
         <button
           type="button"
+          disabled={!online}
           onClick={() => setConfirmingSignOut(true)}
-          className="mt-6 flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-danger-soft px-4 py-3 font-semibold text-danger active:opacity-70"
+          className="mt-6 flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-danger-soft px-4 py-3 font-semibold text-danger active:opacity-70 disabled:opacity-40"
         >
           Sign out
         </button>
+
+        {!online && (
+          <p className="mt-2 text-center text-xs text-muted">
+            Sign out needs a connection — it clears this device, and anything still queued
+            would go with it.
+          </p>
+        )}
+
+        {signOutError && (
+          <p role="alert" className="mt-3 rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
+            {signOutError}
+          </p>
+        )}
       </Screen>
 
       {confirmingSignOut && (
         <ConfirmDialog
           title="Sign out?"
-          message="Cached data on this device is cleared. Anything still waiting to sync will be lost, so sync first if you're unsure."
+          message="Queued changes are pushed first, then cached data on this device is cleared. Anything the server rejects will be lost."
           confirmLabel="Sign out"
-          onConfirm={() => void signOut()}
+          onConfirm={() => {
+            setConfirmingSignOut(false);
+            void signOut().then(setSignOutError);
+          }}
           onCancel={() => setConfirmingSignOut(false)}
         />
       )}

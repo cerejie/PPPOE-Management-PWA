@@ -6,7 +6,7 @@ import { fieldClass, labelClass, primaryButtonClass } from '@/styles/common/form
 import { useAuth } from '@/store/auth/AuthContext';
 import { useClients, type ClientFilters } from '@/hooks/clients/useClients';
 import { usePlans } from '@/hooks/plans/usePlans';
-import { useOnline } from '@/hooks/sync/useSyncStatus';
+import { OfflineNotice } from '@/components/common/notices/OfflineNotice';
 import {
   formatDate,
   formatMoney,
@@ -56,7 +56,6 @@ const ALL_CLIENTS: ClientFilters = {
 /** Bottom sheet for recording a payment. Works fully offline. */
 export function RecordPaymentSheet({ client, onClose }: Props) {
   const { appUser } = useAuth();
-  const online = useOnline();
   const clients = useClients(ALL_CLIENTS);
   const plans = usePlans();
 
@@ -264,11 +263,7 @@ export function RecordPaymentSheet({ client, onClose }: Props) {
           </p>
         )}
 
-        {!online && (
-          <p className="rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-            You're offline — the payment is queued and synced automatically later.
-          </p>
-        )}
+        <OfflineNotice message="the payment is queued and synced automatically later." />
 
         <button type="submit" disabled={busy} className={primaryButtonClass}>
           {busy ? 'Saving…' : 'Save payment'}

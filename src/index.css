@@ -135,6 +135,16 @@ select option {
   .animate-fade-in {
     animation: fade-in 180ms ease-out;
   }
+
+  /* App-open splash: bars rise in sequence like a signal meter filling. */
+  .animate-signal {
+    transform-origin: bottom;
+    animation: signal 1.1s ease-in-out infinite;
+  }
+
+  .animate-halo {
+    animation: halo 2.4s ease-in-out infinite;
+  }
 }
 
 @keyframes sheet-in {
@@ -157,9 +167,51 @@ select option {
   }
 }
 
+@keyframes signal {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+    opacity: 0.5;
+  }
+  45% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes halo {
+  0%,
+  100% {
+    transform: scale(0.9);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.45;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-sheet-in,
   .animate-fade-in {
     animation: none;
+  }
+
+  /* The splash still has to read as "working", so it drops to a plain fade
+     rather than to a static image with no sign of progress. */
+  .animate-signal,
+  .animate-halo {
+    transform: none;
+    animation: breathe 2s ease-in-out infinite;
   }
 }

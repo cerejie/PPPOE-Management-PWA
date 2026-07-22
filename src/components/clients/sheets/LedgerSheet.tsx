@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Sheet } from '@/components/common/overlays/Sheet';
+import { ConfirmDialog } from '@/components/common/overlays/ConfirmDialog';
+import { deleteLedgerEntry } from '@/services/payments/payments.actions';
 import { useAuth } from '@/store/auth/AuthContext';
 import { formatDateTime, formatDuration, formatMoney } from '@/utils/common/format';
 import type { Client } from '@/types/clients/clients.types';
@@ -27,7 +29,23 @@ const FILTERS: { id: LedgerKind | 'all'; label: string }[] = [
   { id: 'pause', label: 'Pauses' },
 ];
 
-function Row({ entry }: { entry: LedgerEntry }) {
+/** What deleting this particular row will do to the client. */
+function deleteMessage(entry: LedgerEntry): string {
+  if (entry.pending || entry.failed) {
+    return 'This has not reached the server yet, so it is dropped from the queue and its effect on this client is undone.';
+  }
+  if (entry.kind === 'payment') {
+    return entry.amount !== null && entry.amount > 0
+      ? 'The expiry date moves back by exactly the time this payment bought, and the amount leaves the total paid.'
+      : 'A correction never moved the expiry date, so only the row is removed.';
+  }
+  if (entry.kind === 'pause') {
+    return 'Deleting a resume takes the credited time back off the expiry date and re-opens the pause. Deleting an open pause just un-pauses the client.';
+  }
+  return 'The connection status is recalculated from whichever events remain.';
+}
+
+function Row({ entry, onDelete }: { entry: LedgerEntry; onDelete?: () => void }) {
   const style = KIND_STYLE[entry.kind];
 
   return (
@@ -53,12 +71,31 @@ function Row({ entry }: { entry: LedgerEntry }) {
 
       {entry.amount !== null && (
         <span
-          className={`shrink-0 text-sm font-semibold tabular-nums ${
+          className={`shrink-0 self-center text-sm font-semibold tabular-nums ${
             entry.amount < 0 ? 'text-danger' : 'text-fg'
           }`}
         >
           {formatMoney(entry.amount)}
         </span>
+      )}
+
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={`Delete ${entry.title.toLowerCase()} from ${formatDateTime(entry.at)}`}
+          className="-mr-1.5 flex h-8 w-8 shrink-0 items-center justify-center self-center rounded-full text-muted active:bg-danger-soft active:text-danger"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 7h16M9 7V5h6v2m-8 0l1 13h8l1-13"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       )}
     </li>
   );
@@ -67,13 +104,30 @@ function Row({ entry }: { entry: LedgerEntry }) {
 /** Full client history — payments, connection events and pauses — plus PDF export. */
 export function LedgerSheet({ client, room, plan, onClose }: Props) {
   const ledger = useClientLedger(client.id);
-  const { appUser } = useAuth();
+  const { appUser, isSuperAdmin } = useAuth();
   const [filter, setFilter] = useState<LedgerKind | 'all'>('all');
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<LedgerEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const visible =
     filter === 'all' ? ledger?.entries : ledger?.entries.filter((e) => e.kind === filter);
+
+  async function handleDelete() {
+    if (!confirming || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const err = await deleteLedgerEntry({
+      id: confirming.id,
+      kind: confirming.kind,
+      queued: confirming.pending || confirming.failed,
+    });
+    setDeleting(false);
+    setConfirming(null);
+    if (err) setDeleteError(err);
+  }
 
   async function handleExport() {
     if (!ledger || exporting) return;
@@ -99,6 +153,7 @@ export function LedgerSheet({ client, room, plan, onClose }: Props) {
   }
 
   return (
+    <>
     <Sheet title="Ledger" subtitle={client.full_name} onClose={onClose}>
       {ledger === undefined ? (
         <p className="py-12 text-center text-sm text-muted">Loading…</p>
@@ -142,11 +197,21 @@ export function LedgerSheet({ client, room, plan, onClose }: Props) {
           {visible && visible.length > 0 ? (
             <ul className="mt-1">
               {visible.map((entry) => (
-                <Row key={entry.id} entry={entry} />
+                <Row
+                  key={entry.id}
+                  entry={entry}
+                  onDelete={isSuperAdmin ? () => setConfirming(entry) : undefined}
+                />
               ))}
             </ul>
           ) : (
             <p className="py-12 text-center text-sm text-muted">Nothing recorded yet.</p>
+          )}
+
+          {deleteError && (
+            <p role="alert" className="mt-3 rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
+              {deleteError}
+            </p>
           )}
 
           {ledger.truncated && (
@@ -182,5 +247,17 @@ export function LedgerSheet({ client, room, plan, onClose }: Props) {
         </>
       )}
     </Sheet>
+
+    {confirming && (
+      <ConfirmDialog
+        title="Delete this entry?"
+        message={deleteMessage(confirming)}
+        confirmLabel="Delete"
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+        onCancel={() => setConfirming(null)}
+      />
+    )}
+    </>
   );
 }

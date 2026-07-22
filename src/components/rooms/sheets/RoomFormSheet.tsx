@@ -7,7 +7,7 @@ import {
   labelClass,
   primaryButtonClass,
 } from '@/styles/common/formStyles';
-import { useOnline } from '@/hooks/sync/useSyncStatus';
+import { OfflineNotice } from '@/components/common/notices/OfflineNotice';
 import type { Room } from '@/types/rooms/rooms.types';
 import { createRoom, softDeleteRoom, updateRoom, type RoomInput } from '@/services/rooms/rooms.actions';
 
@@ -16,12 +16,13 @@ interface Props {
   room?: Room;
   /** Current router label for the room, if any. */
   routerLabel?: string;
+  /** Clients currently assigned — what the delete confirm has to warn about. */
+  clientCount?: number;
   onClose: () => void;
 }
 
-export function RoomFormSheet({ room, routerLabel = '', onClose }: Props) {
+export function RoomFormSheet({ room, routerLabel = '', clientCount = 0, onClose }: Props) {
   const isEdit = room !== undefined;
-  const online = useOnline();
 
   const [form, setForm] = useState<RoomInput>({
     name: room?.name ?? '',
@@ -118,11 +119,7 @@ export function RoomFormSheet({ room, routerLabel = '', onClose }: Props) {
             />
           </div>
 
-          {!online && (
-            <p className="rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-              Room changes need a connection. Go online and try again.
-            </p>
-          )}
+          <OfflineNotice message="this room is saved on the device and synced automatically later." />
 
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
@@ -130,14 +127,14 @@ export function RoomFormSheet({ room, routerLabel = '', onClose }: Props) {
             </p>
           )}
 
-          <button type="submit" disabled={busy || !online} className={primaryButtonClass}>
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add room'}
           </button>
 
           {isEdit && (
             <button
               type="button"
-              disabled={busy || !online}
+              disabled={busy}
               onClick={() => setConfirmingDelete(true)}
               className={dangerButtonClass}
             >
@@ -150,7 +147,13 @@ export function RoomFormSheet({ room, routerLabel = '', onClose }: Props) {
       {confirmingDelete && room && (
         <ConfirmDialog
           title="Delete room?"
-          message={`"${room.name}" will be removed from the app. Any router attached to it is detached. This is refused if clients are still assigned to the room.`}
+          message={
+            clientCount > 0
+              ? `"${room.name}" will be removed and its router detached. ${clientCount} client${
+                  clientCount === 1 ? '' : 's'
+                } will be left without a room and will need reassigning — they are not deleted.`
+              : `"${room.name}" will be removed from the app. Any router attached to it is detached.`
+          }
           confirmLabel="Delete"
           busy={busy}
           onConfirm={() => void handleDelete()}

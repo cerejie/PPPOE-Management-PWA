@@ -4,6 +4,7 @@ import { newUuid } from '@/utils/common/format';
 import { supabase } from '@/api/common/supabaseClient';
 import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/clients.types';
 import type { Payment } from '@/types/payments/payments.types';
+import { isClientEvent } from '@/types/sync/sync.types';
 import type {
   EntityTable,
   OutboxConnectionEventPayload,
@@ -138,14 +139,17 @@ async function pushOutboxItem(item: OutboxItem): Promise<boolean> {
     } else {
       const e = item.payload;
       // Insert carries the device-generated id, so a retry conflicts on the
-      // primary key and is ignored rather than creating a second row. Update
-      // is a patch and is naturally idempotent.
+      // primary key and is ignored rather than creating a second row. Update is
+      // a patch and is naturally idempotent; a delete that already succeeded
+      // matches no rows on retry, so its server-side reversal cannot fire twice.
       const { error } =
         e.op === 'insert'
           ? await supabase
               .from(e.table)
-              .upsert(e.values, { onConflict: 'id', ignoreDuplicates: true })
-          : await supabase.from(e.table).update(e.values).eq('id', e.row_id);
+              .upsert(e.values ?? {}, { onConflict: 'id', ignoreDuplicates: true })
+          : e.op === 'update'
+            ? await supabase.from(e.table).update(e.values ?? {}).eq('id', e.row_id)
+            : await supabase.from(e.table).delete().eq('id', e.row_id);
       if (error) serverError = error.message;
     }
   } catch {
@@ -178,10 +182,35 @@ async function pushOutboxItem(item: OutboxItem): Promise<boolean> {
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 /** Tables an optimistic mirror may touch; every queueing transaction needs all of them. */
-const MIRROR_TABLES = [db.outbox, db.clients, db.plans, db.rooms, db.routers];
+const MIRROR_TABLES = [
+  db.outbox,
+  db.clients,
+  db.plans,
+  db.rooms,
+  db.routers,
+  db.payments,
+  db.connection_events,
+  db.pause_events,
+  db.app_users,
+];
 
 async function queue(item: OutboxItem, mirror: () => Promise<void>): Promise<void> {
   await db.transaction('rw', MIRROR_TABLES, async () => {
+    if (isClientEvent(item)) {
+      // Snapshot before the mirror moves anything: the only way back if this
+      // event is discarded while it is still queued (see
+      // discardQueuedClientEvent).
+      const client = await db.clients.get(item.payload.client_id);
+      if (client) {
+        item.undo = {
+          expires_at: client.expires_at,
+          paused_at: client.paused_at,
+          connection_status: client.connection_status,
+          connection_status_updated_at: client.connection_status_updated_at,
+        };
+      }
+    }
+
     await db.outbox.add(item);
     await mirror();
   });
@@ -284,8 +313,99 @@ async function mirrorPauseEvent(p: OutboxPauseEventPayload): Promise<void> {
 }
 
 /**
- * Apply a queued entity write to the local mirror, so an offline create or
- * edit is visible everywhere in the app the moment it is made.
+ * Mirror of reverse_payment_on_client(). The window the payment bought is
+ * stamped on the row itself, so the reversal is exact rather than a guess at
+ * which plan duration applied at the time.
+ */
+async function mirrorPaymentDelete(id: string): Promise<void> {
+  const payment = await db.payments.get(id);
+  if (!payment) return;
+
+  // Corrections never extended anything, so they have nothing to undo.
+  if (payment.amount > 0 && payment.covers_from && payment.covers_to) {
+    const client = await db.clients.get(payment.client_id);
+    if (client?.expires_at) {
+      const window =
+        new Date(payment.covers_to).getTime() - new Date(payment.covers_from).getTime();
+      await db.clients.update(payment.client_id, {
+        expires_at: new Date(new Date(client.expires_at).getTime() - window).toISOString(),
+      });
+    }
+  }
+
+  await db.payments.delete(id);
+}
+
+/** Mirror of reverse_pause_event(). */
+async function mirrorPauseDelete(id: string): Promise<void> {
+  const event = await db.pause_events.get(id);
+  if (!event) return;
+
+  const client = await db.clients.get(event.client_id);
+
+  if (client) {
+    if (event.action === 'resume') {
+      // Re-open the pause this resume closed: the newest one before it.
+      const reopen = (await db.pause_events.where('client_id').equals(event.client_id).toArray())
+        .filter(
+          (p) => p.action === 'pause' && p.id !== id && p.performed_at <= event.performed_at,
+        )
+        .sort((a, b) => b.performed_at.localeCompare(a.performed_at))[0];
+
+      await db.clients.update(event.client_id, {
+        paused_at: reopen?.performed_at ?? null,
+        expires_at: client.expires_at
+          ? new Date(
+              new Date(client.expires_at).getTime() - event.credited_seconds * 1000,
+            ).toISOString()
+          : null,
+      });
+    } else if (client.paused_at === event.performed_at) {
+      // Only an open pause is reflected in derived state; one already closed by
+      // a resume left nothing behind for this delete to undo.
+      await db.clients.update(event.client_id, { paused_at: null });
+    }
+  }
+
+  await db.pause_events.delete(id);
+}
+
+/**
+ * Mirror of reverse_connection_event(). connection_status is last-write-wins
+ * over the history, so this is a recompute from what survives rather than an
+ * inverse of one row — deleting an event that was not the newest changes
+ * nothing, exactly as on the server.
+ */
+async function mirrorConnectionDelete(id: string): Promise<void> {
+  const event = await db.connection_events.get(id);
+  if (!event) return;
+
+  await db.connection_events.delete(id);
+
+  const newest = (await db.connection_events.where('client_id').equals(event.client_id).toArray())
+    .sort((a, b) => b.performed_at.localeCompare(a.performed_at))[0];
+
+  await db.clients.update(event.client_id, {
+    connection_status: newest?.action === 'connect' ? 'connected' : 'disconnected',
+    connection_status_updated_at: newest?.performed_at ?? new Date().toISOString(),
+  });
+}
+
+/**
+ * Local half of the server's ON DELETE CASCADE (migration 0008). Without it a
+ * client deleted offline would leave its payments and events orphaned in Dexie,
+ * where they would still be counted by the ledger and the dashboard.
+ */
+async function mirrorClientDelete(id: string): Promise<void> {
+  await db.payments.where('client_id').equals(id).delete();
+  await db.connection_events.where('client_id').equals(id).delete();
+  await db.pause_events.where('client_id').equals(id).delete();
+  await db.clients.delete(id);
+}
+
+/**
+ * Apply a queued entity write to the local mirror, so an offline create, edit
+ * or delete is visible everywhere in the app the moment it is made.
  *
  * Dexie's typed tables are homogeneous, so the table is resolved by name; the
  * row shape is checked at the call sites in each feature's actions.ts.
@@ -294,13 +414,27 @@ async function mirrorEntity(e: OutboxEntityPayload): Promise<void> {
   // Resolved by name, so the row type is only known to the caller in
   // actions.ts; this is the single point where that is taken on trust.
   const table = db.table(e.table) as Table<Record<string, unknown>, string>;
-  const values = e.values as Record<string, unknown>;
+  const values = (e.values ?? {}) as Record<string, unknown>;
 
   if (e.op === 'insert') {
     await table.put(values);
-  } else {
-    await table.update(e.row_id, values);
+    return;
   }
+
+  if (e.op === 'update') {
+    await table.update(e.row_id, values);
+    return;
+  }
+
+  // Deleting a ledger row has to undo the derived state its insert produced,
+  // and deleting a client has to take its history with it; every other table's
+  // delete is just the row going away.
+  if (e.table === 'payments') return mirrorPaymentDelete(e.row_id);
+  if (e.table === 'pause_events') return mirrorPauseDelete(e.row_id);
+  if (e.table === 'connection_events') return mirrorConnectionDelete(e.row_id);
+  if (e.table === 'clients') return mirrorClientDelete(e.row_id);
+
+  await table.delete(e.row_id);
 }
 
 async function applyMirror(item: OutboxItem): Promise<void> {
@@ -335,11 +469,15 @@ async function applyMirror(item: OutboxItem): Promise<void> {
  *     client offline should not have it disappear days later because of a
  *     duplicate username; it stays visible, flagged as rejected, and is
  *     resolved from the Sync screen.
+ *   - A rejected entity *delete* is the exception to that exception: replaying
+ *     it would keep hiding a row the server still holds, so the row comes back
+ *     and the rejection is dealt with on the Sync screen instead.
  */
 async function replayPendingOutbox(): Promise<void> {
-  const items = (await db.outbox.orderBy('created_at').toArray()).filter(
-    (item) => item.status === 'pending' || item.kind === 'entity_write',
-  );
+  const items = (await db.outbox.orderBy('created_at').toArray()).filter((item) => {
+    if (item.status === 'pending') return true;
+    return item.kind === 'entity_write' && item.payload.op !== 'delete';
+  });
   if (items.length === 0) return;
 
   await db.transaction('rw', MIRROR_TABLES, async () => {
@@ -434,6 +572,38 @@ export async function entityWriteStates(
 /** Delete a permanently-failed outbox item after operator review. */
 export async function discardOutboxItem(clientUuid: string): Promise<void> {
   await db.outbox.delete(clientUuid);
+}
+
+/**
+ * Drop a client event that is still queued, and unwind the optimistic effect it
+ * had on the client.
+ *
+ * Nothing reached the server, so there is no row for the reversal triggers to
+ * act on: the derived state is rebuilt locally instead, from the snapshot taken
+ * before the *earliest* event queued for that client, after which every event
+ * still queued is re-applied in order. Restoring this item's own snapshot would
+ * double-count everything queued before it.
+ */
+export async function discardQueuedClientEvent(clientUuid: string): Promise<void> {
+  await db.transaction('rw', MIRROR_TABLES, async () => {
+    const item = await db.outbox.get(clientUuid);
+    if (!item || !isClientEvent(item)) return;
+
+    const clientId = item.payload.client_id;
+    const queued = (await db.outbox.orderBy('created_at').toArray())
+      .filter(isClientEvent)
+      .filter((i) => i.payload.client_id === clientId);
+
+    const baseline = queued[0]?.undo;
+
+    await db.outbox.delete(clientUuid);
+
+    if (baseline) await db.clients.update(clientId, baseline);
+    for (const remaining of queued) {
+      if (remaining.client_uuid === clientUuid) continue;
+      await applyMirror(remaining);
+    }
+  });
 }
 
 export async function retryOutboxItem(clientUuid: string): Promise<void> {

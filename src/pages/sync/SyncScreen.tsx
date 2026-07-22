@@ -15,6 +15,10 @@ const ENTITY_LABEL: Record<EntityTable, string> = {
   rooms: 'room',
   routers: 'router',
   plans: 'plan',
+  payments: 'payment',
+  connection_events: 'connection event',
+  pause_events: 'pause event',
+  app_users: 'staff account',
 };
 
 function describeItem(item: OutboxItem): string {
@@ -29,8 +33,9 @@ function describeItem(item: OutboxItem): string {
   const e = item.payload;
   const noun = ENTITY_LABEL[e.table];
   if (e.op === 'insert') return `Add ${noun}`;
+  if (e.op === 'delete') return `Delete ${noun}`;
   // A soft delete is an update that sets deleted_at; name it as a delete.
-  return 'deleted_at' in e.values ? `Delete ${noun}` : `Edit ${noun}`;
+  return e.values && 'deleted_at' in e.values ? `Delete ${noun}` : `Edit ${noun}`;
 }
 
 /**

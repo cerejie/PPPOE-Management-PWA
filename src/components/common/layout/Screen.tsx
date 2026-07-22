@@ -22,7 +22,10 @@ export function Screen({ title, eyebrow, back = false, action, children }: Scree
   const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas">
+    // min-h-full, not min-h-dvh: the shell already owns the viewport height and
+    // this fills its scroll container, so a short screen does not become
+    // scrollable by a tab bar's worth of empty space.
+    <div className="flex min-h-full flex-col bg-canvas">
       <header className="sticky top-0 z-20 border-b border-line/70 bg-canvas/80 pt-safe-top backdrop-blur-xl">
         <div className="mx-auto flex min-h-[60px] w-full max-w-app items-center justify-between gap-3 px-4 py-2">
           <div className="flex min-w-0 items-center gap-1.5">
