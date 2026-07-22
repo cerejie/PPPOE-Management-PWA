@@ -7,6 +7,7 @@ import {
   fieldClass,
   labelClass,
   primaryButtonClass,
+  selectClass,
 } from '@/styles/common/formStyles';
 import { isPlanOfferable } from '@/services/plans/plans.actions';
 import { useOnline } from '@/hooks/sync/useSyncStatus';
@@ -180,7 +181,7 @@ export function ClientFormScreen() {
                 const roomRouter = routers?.find((r) => r.room_id === roomId);
                 setForm((f) => ({ ...f, room_id: roomId, router_id: roomRouter?.id ?? null }));
               }}
-              className={fieldClass}
+              className={selectClass}
             >
               <option value="">No room</option>
               {(rooms ?? []).map((r) => (
@@ -199,7 +200,7 @@ export function ClientFormScreen() {
               id="plan"
               value={form.plan_id ?? ''}
               onChange={(e) => handlePlanChange(e.target.value)}
-              className={fieldClass}
+              className={selectClass}
             >
               <option value="">No plan</option>
               {selectablePlans.map((p) => (
@@ -256,7 +257,7 @@ export function ClientFormScreen() {
               id="account_status"
               value={form.account_status}
               onChange={(e) => set('account_status', e.target.value as AccountStatus)}
-              className={`${fieldClass} capitalize`}
+              className={`${selectClass} capitalize`}
             >
               {ACCOUNT_STATUSES.map((s) => (
                 <option key={s} value={s}>

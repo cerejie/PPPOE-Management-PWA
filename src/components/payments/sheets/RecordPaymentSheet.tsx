@@ -1,5 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Sheet } from '@/components/common/overlays/Sheet';
+import { DateField } from '@/components/common/inputs/DateField';
+import { SearchSelect } from '@/components/common/inputs/SearchSelect';
 import { fieldClass, labelClass, primaryButtonClass } from '@/styles/common/formStyles';
 import { useAuth } from '@/store/auth/AuthContext';
 import { useClients, type ClientFilters } from '@/hooks/clients/useClients';
@@ -22,6 +24,26 @@ interface Props {
 }
 
 const METHODS = ['Cash', 'GCash', 'Bank', 'Other'] as const;
+
+/**
+ * Keeps the field usable mid-typing: digits, one leading minus (a correction is
+ * a negative row) and at most one decimal point with two places. Nothing is
+ * padded here — the cents only appear on blur.
+ */
+function sanitiseAmountInput(raw: string): string {
+  const negative = raw.trimStart().startsWith('-');
+  const [whole = '', ...rest] = raw.replace(/[^\d.]/g, '').split('.');
+  const decimals = rest.join('').slice(0, 2);
+  const body = rest.length > 0 ? `${whole}.${decimals}` : whole;
+  return negative ? `-${body}` : body;
+}
+
+/** "1500" -> "1500.00" once the operator leaves the field. */
+function formatAmountOnBlur(raw: string): string {
+  const value = Number(raw);
+  if (raw.trim() === '' || !Number.isFinite(value)) return raw;
+  return value.toFixed(2);
+}
 
 const ALL_CLIENTS: ClientFilters = {
   search: '',
@@ -46,14 +68,34 @@ export function RecordPaymentSheet({ client, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const clientOptions = useMemo(
+    () =>
+      (clients ?? []).map((c) => ({
+        value: c.id,
+        label: c.full_name,
+        hint: c.pppoe_username,
+      })),
+    [clients],
+  );
+
   const selected = client ?? clients?.find((c) => c.id === clientId);
   const plan = plans?.find((p) => p.id === selected?.plan_id);
-  const due = plan?.price ?? selected?.monthly_fee ?? 0;
+
+  // The plan price is the subscription amount; monthly_fee covers clients on no
+  // plan (or on one since archived). `??` would not fall through on a 0 price,
+  // which is why this tests the value rather than nullishness.
+  const due = plan && plan.price > 0 ? plan.price : (selected?.monthly_fee ?? 0);
+
+  // Plans arrive from Dexie a tick after clients do. Prefilling from
+  // monthly_fee in that gap would flash the wrong number and could overwrite
+  // an amount the operator had already started typing.
+  const awaitingPlan = plans === undefined && selected?.plan_id != null;
 
   // Choosing a customer fills in what they owe; the operator can still edit it.
   useEffect(() => {
-    setAmount(due > 0 ? String(due) : '');
-  }, [selected?.id, due]);
+    if (awaitingPlan) return;
+    setAmount(due > 0 ? due.toFixed(2) : '');
+  }, [selected?.id, due, awaitingPlan]);
 
   const paidAt = fromDateInputStart(paidOn);
   const parsed = Number(amount);
@@ -108,21 +150,16 @@ export function RecordPaymentSheet({ client, onClose }: Props) {
             <label htmlFor="pay-client" className={labelClass}>
               Customer
             </label>
-            <select
+            {/* Deliberately not autofocused: opening the sheet should show the
+                whole form, not a dropdown over it with the keyboard up. */}
+            <SearchSelect
               id="pay-client"
-              required
-              autoFocus
               value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-              className={fieldClass}
-            >
-              <option value="">Select customer…</option>
-              {(clients ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.full_name} — {c.pppoe_username}
-                </option>
-              ))}
-            </select>
+              onChange={setClientId}
+              options={clientOptions}
+              placeholder="Search name or PPPoE username…"
+              emptyMessage="No customer matches that search."
+            />
           </div>
         )}
 
@@ -130,14 +167,11 @@ export function RecordPaymentSheet({ client, onClose }: Props) {
           <label htmlFor="paid-on" className={labelClass}>
             Date paid
           </label>
-          <input
+          <DateField
             id="paid-on"
-            type="date"
-            required
             max={todayInputValue()}
             value={paidOn}
-            onChange={(e) => setPaidOn(e.target.value)}
-            className={fieldClass}
+            onChange={setPaidOn}
           />
           <p className="mt-1.5 text-xs text-muted">
             Defaults to today. Set it back if the payment is being recorded late — the new expiry
@@ -151,15 +185,23 @@ export function RecordPaymentSheet({ client, onClose }: Props) {
           </label>
           <input
             id="amount"
-            type="number"
+            type="text"
             inputMode="decimal"
-            step="0.01"
+            autoComplete="off"
             required
             autoFocus={client !== undefined}
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => setAmount(sanitiseAmountInput(e.target.value))}
+            onBlur={(e) => setAmount(formatAmountOnBlur(e.target.value))}
             className={`${fieldClass} text-lg font-semibold`}
           />
+          {selected && (
+            <p className="mt-1.5 text-xs text-muted">
+              {due > 0
+                ? `Prefilled from ${plan ? plan.name : 'their monthly fee'} (${formatMoney(due)}). Edit it if they paid a different amount.`
+                : 'This customer has no plan price or monthly fee set — enter the amount manually.'}
+            </p>
+          )}
         </div>
 
         {selected && (
