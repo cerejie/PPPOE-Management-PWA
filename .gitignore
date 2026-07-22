@@ -2,6 +2,12 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# Yarn is the only package manager here; a stray npm/pnpm/bun lockfile drifts
+# from yarn.lock and silently changes what gets installed.
+package-lock.json
+pnpm-lock.yaml
+bun.lockb
 .env
 .env.*
 !.env.example
