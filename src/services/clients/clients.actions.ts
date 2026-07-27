@@ -73,12 +73,21 @@ export async function updateClient(id: string, input: ClientInput): Promise<stri
   return settleWrite(uuid);
 }
 
-export async function softDeleteClient(id: string): Promise<string | null> {
+/**
+ * Delete a client outright, with their payments and events.
+ *
+ * Not a soft delete: pppoe_username is UNIQUE across every row, so a flagged
+ * row would hold that username forever and re-adding the same subscriber —
+ * someone moving back into the same room — would fail on the constraint with no
+ * way for the app to release it. The server cascades the history (see
+ * migration 0008) and the local mirror does the same; audit_log keeps a copy of
+ * everything removed.
+ */
+export async function deleteClient(id: string): Promise<string | null> {
   const uuid = await queueEntityWrite({
     table: 'clients',
-    op: 'update',
+    op: 'delete',
     row_id: id,
-    values: { deleted_at: new Date().toISOString() },
   });
   return settleWrite(uuid);
 }

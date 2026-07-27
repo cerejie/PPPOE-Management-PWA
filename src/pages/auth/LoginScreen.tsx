@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { fieldClass, labelClass, primaryButtonClass } from '@/styles/common/formStyles';
+import { useOnline } from '@/hooks/sync/useSyncStatus';
 import { useAuth } from '@/store/auth/AuthContext';
 
 export function LoginScreen() {
   const { signIn } = useAuth();
+  const online = useOnline();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -65,13 +67,20 @@ export function LoginScreen() {
             />
           </div>
 
+          {!online && (
+            <p className="rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
+              You&apos;re offline — signing in is the one thing that needs a connection. Once
+              you have signed in on this device, the app keeps working without one.
+            </p>
+          )}
+
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
               {error}
             </p>
           )}
 
-          <button type="submit" disabled={busy} className={primaryButtonClass}>
+          <button type="submit" disabled={busy || !online} className={primaryButtonClass}>
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>

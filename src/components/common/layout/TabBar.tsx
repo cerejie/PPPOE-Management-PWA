@@ -75,11 +75,17 @@ const tabs: Tab[] = [
   },
 ];
 
-/** Floating bottom tab bar, native-app style, with safe-area inset. */
+/**
+ * Bottom tab bar, native-app style, with safe-area inset.
+ *
+ * Deliberately in normal flow as the last row of the shell's flex column rather
+ * than `position: fixed` — see AuthenticatedShell. The safe-area padding keeps
+ * it clear of the iOS home indicator.
+ */
 export function TabBar() {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 flex justify-center pb-safe-bottom"
+      className="z-30 flex shrink-0 justify-center pb-safe-bottom"
       aria-label="Main navigation"
     >
       <div className="w-full max-w-app px-4 pb-3">

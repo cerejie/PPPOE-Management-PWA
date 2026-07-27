@@ -8,6 +8,12 @@ export const inputClass =
 
 export const fieldClass = `mt-1.5 ${inputClass}`;
 
+/**
+ * Selects need room for the chevron drawn in index.css, and should read as a
+ * button rather than a text box.
+ */
+export const selectClass = `${fieldClass} cursor-pointer truncate pr-11`;
+
 export const primaryButtonClass =
   'flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-accent-gradient px-4 py-3 font-semibold text-white shadow-float transition-opacity active:opacity-80 disabled:opacity-40 disabled:shadow-none';
 

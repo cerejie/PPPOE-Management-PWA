@@ -7,20 +7,30 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, usernameToEmail } from '@/api/common/supabaseClient';
-import { clearLocalCache, db } from '@/api/common/db';
+import { clearLocalCache, db, deleteMeta, getMeta, setMeta } from '@/api/common/db';
 import { flushOutbox, pullAll, startSyncEngine } from '@/api/sync/syncEngine';
 import type { AppUser } from '@/types/auth/auth.types';
 
+/** Last user this device signed in as — the offline half of `session`. */
+const AUTH_USER_KEY = 'auth_user_id';
+
 interface AuthContextValue {
-  session: Session | null;
   appUser: AppUser | null;
+  /**
+   * True while the app may be used. Deliberately not "has a valid token": a
+   * device that signed in and then went offline stays authenticated here, and
+   * only a server-confirmed sign-out takes it back to false.
+   */
+  authenticated: boolean;
   /** True until the initial session restore finishes. */
   loading: boolean;
   isSuperAdmin: boolean;
   signIn: (identifier: string, password: string) => Promise<string | null>;
-  signOut: () => Promise<void>;
+  /** Returns an error message when the sign-out could not be completed. */
+  signOut: () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -29,6 +39,10 @@ async function loadAppUser(userId: string): Promise<AppUser | null> {
   // Prefer the local mirror so offline restarts still resolve the role.
   const cached = await db.app_users.get(userId);
   if (cached) return cached;
+
+  // Offline the fetch below can only hang the splash screen — there is nothing
+  // to fall back to, so fail fast and let the caller send them to sign in.
+  if (!navigator.onLine) return null;
 
   const { data, error } = await supabase
     .from('app_users')
@@ -43,27 +57,71 @@ async function loadAppUser(userId: string): Promise<AppUser | null> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Read live from Dexie rather than held as state, so a rename — or a pull
+  // that changes this user's role — reaches every screen without a reload.
+  const appUser = useLiveQuery(
+    async () => (userId ? ((await db.app_users.get(userId)) ?? null) : null),
+    [userId],
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
 
-    void supabase.auth.getSession().then(async ({ data }) => {
-      if (cancelled) return;
-      setSession(data.session);
-      if (data.session) {
-        const user = await loadAppUser(data.session.user.id);
-        if (!cancelled) setAppUser(user);
+    async function restore(): Promise<void> {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        setSession(data.session);
+
+        // Offline, `getSession()` returns null because the access token expired
+        // and the refresh could not reach the auth server — not because the user
+        // signed out. The refresh token stays on disk and re-validates on
+        // reconnect, so fall back to the last user this device signed in as and
+        // let the app run against Dexie. Supabase only clears that token when the
+        // server actually rejects it, which arrives here as SIGNED_OUT below.
+        const restored = data.session?.user.id ?? (await getMeta(AUTH_USER_KEY));
+        if (cancelled) return;
+
+        if (!restored) return;
+
+        const user = await loadAppUser(restored);
+        if (cancelled) return;
+
+        // Same bar as signIn(): a deactivated account does not get back in,
+        // even when the only copy of that flag is the last mirror we pulled.
+        if (user && !user.is_active) {
+          await deleteMeta(AUTH_USER_KEY);
+          setSession(null);
+          if (navigator.onLine) await supabase.auth.signOut();
+          return;
+        }
+
+        if (user) {
+          setUserId(user.id);
+          await setMeta(AUTH_USER_KEY, user.id);
+        }
+      } finally {
+        // Whatever failed above, the splash screen must not be the end state.
+        if (!cancelled) setLoading(false);
       }
-      if (!cancelled) setLoading(false);
-    });
+    }
+
+    void restore();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, next) => {
+    } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next);
-      if (!next) setAppUser(null);
+      // A null session on any other event is a failed refresh, which offline is
+      // expected; only an explicit SIGNED_OUT means the token is really gone.
+      if (event === 'SIGNED_OUT') {
+        setUserId(null);
+        void deleteMeta(AUTH_USER_KEY);
+      }
     });
 
     return () => {
@@ -72,15 +130,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Start sync + initial pull once authenticated.
+  // Signed in — with or without a live token — so the sync engine runs and the
+  // outbox flushes the moment connectivity returns. Offline both calls no-op.
+  const authenticated = Boolean(session) || userId !== null;
+
   useEffect(() => {
-    if (!session) return;
+    if (!authenticated) return;
     startSyncEngine();
     void flushOutbox().then(() => pullAll());
-  }, [session]);
+  }, [authenticated]);
 
   const signIn = useCallback(
     async (identifier: string, password: string): Promise<string | null> => {
+      if (!navigator.onLine) {
+        return 'Signing in needs a connection. Once signed in, this device keeps working offline.';
+      }
+
       // Real email => SuperAdmin login; bare username => synthetic staff email.
       const email = identifier.includes('@')
         ? identifier.trim()
@@ -98,29 +163,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         return 'This account is inactive.';
       }
-      setAppUser(user);
+      setUserId(user.id);
+      await setMeta(AUTH_USER_KEY, user.id);
       void pullAll();
       return null;
     },
     [],
   );
 
-  const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+  const signOut = useCallback(async (): Promise<string | null> => {
+    // Signing out wipes the local cache, and the outbox with it. Offline that
+    // would discard queued writes with no way to push them first, and Supabase
+    // cannot revoke the token anyway — so it has to wait for a connection.
+    if (!navigator.onLine) {
+      return 'Sign out needs a connection so queued changes are not lost.';
+    }
+
+    // Last chance to push anything still queued before the cache is cleared.
+    await flushOutbox();
+
+    const { error } = await supabase.auth.signOut();
+    if (error) return error.message;
+
     await clearLocalCache();
-    setAppUser(null);
+    setUserId(null);
+    setSession(null);
+    return null;
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      session,
       appUser,
+      authenticated,
       loading,
       isSuperAdmin: appUser?.role === 'superadmin',
       signIn,
       signOut,
     }),
-    [session, appUser, loading, signIn, signOut],
+    [appUser, authenticated, loading, signIn, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

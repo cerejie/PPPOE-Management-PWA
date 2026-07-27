@@ -8,7 +8,9 @@ import type {
   OutboxPaymentPayload,
 } from '@/types/sync/sync.types';
 
-export type LedgerKind = 'payment' | 'connection' | 'pause';
+import type { LedgerKind } from '@/types/clients/clients.types';
+
+export type { LedgerKind };
 
 export interface LedgerEntry {
   /** Stable across renders: server id, or the outbox idempotency key. */

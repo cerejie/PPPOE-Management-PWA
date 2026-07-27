@@ -11,14 +11,26 @@ import { PlansScreen } from '@/pages/plans/PlansScreen';
 import { SyncScreen } from '@/pages/sync/SyncScreen';
 import { useBackgroundSync } from '@/hooks/sync/useSyncStatus';
 import { TabBar } from '@/components/common/layout/TabBar';
+import { AppSplash } from '@/components/common/layout/AppSplash';
 
+/**
+ * App shell: a viewport-height column with the routed screen scrolling inside
+ * it and the tab bar as the last row.
+ *
+ * The bar used to be `position: fixed`, which on an installed iOS PWA is only
+ * as stable as env(safe-area-inset-bottom) is on first paint — it settled to a
+ * different offset once another route forced a re-layout. As a flex row it is
+ * placed by the layout itself and cannot move.
+ */
 function AuthenticatedShell() {
   useBackgroundSync();
   return (
-    <>
-      <Outlet />
+    <div className="flex h-dvh flex-col overflow-hidden bg-canvas">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <Outlet />
+      </div>
       <TabBar />
-    </>
+    </div>
   );
 }
 
@@ -28,17 +40,13 @@ function SuperAdminOnly() {
 }
 
 export function App() {
-  const { session, loading } = useAuth();
+  const { authenticated, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex min-h-dvh items-center justify-center bg-canvas">
-        <p className="text-sm text-muted">Loading…</p>
-      </div>
-    );
+    return <AppSplash />;
   }
 
-  if (!session) {
+  if (!authenticated) {
     return <LoginScreen />;
   }
 

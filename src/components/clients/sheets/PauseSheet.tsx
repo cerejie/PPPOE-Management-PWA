@@ -3,7 +3,7 @@ import { Sheet } from '@/components/common/overlays/Sheet';
 import { fieldClass, labelClass, primaryButtonClass } from '@/styles/common/formStyles';
 import { useAuth } from '@/store/auth/AuthContext';
 import { setPaused } from '@/services/payments/payments.actions';
-import { useOnline } from '@/hooks/sync/useSyncStatus';
+import { OfflineNotice } from '@/components/common/notices/OfflineNotice';
 import { daysUntil, formatDate, formatDateTime, formatDuration } from '@/utils/common/format';
 import type { Client } from '@/types/clients/clients.types';
 
@@ -18,7 +18,6 @@ interface Props {
  */
 export function PauseSheet({ client, onClose }: Props) {
   const { appUser } = useAuth();
-  const online = useOnline();
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -109,11 +108,7 @@ export function PauseSheet({ client, onClose }: Props) {
           />
         </div>
 
-        {!online && (
-          <p className="rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-            You're offline — this is queued and synced automatically later.
-          </p>
-        )}
+        <OfflineNotice />
 
         <button type="submit" disabled={busy} className={primaryButtonClass}>
           {busy ? 'Saving…' : paused ? 'Resume now' : 'Pause now'}

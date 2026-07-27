@@ -7,7 +7,7 @@ import {
   labelClass,
   primaryButtonClass,
 } from '@/styles/common/formStyles';
-import { useOnline } from '@/hooks/sync/useSyncStatus';
+import { OfflineNotice } from '@/components/common/notices/OfflineNotice';
 import { fromDateInputValue, toDateInputValue } from '@/utils/common/format';
 import type { Plan } from '@/types/plans/plans.types';
 import { createPlan, softDeletePlan, updatePlan, type PlanInput } from '@/services/plans/plans.actions';
@@ -20,7 +20,6 @@ interface Props {
 
 export function PlanFormSheet({ plan, onClose }: Props) {
   const isEdit = plan !== undefined;
-  const online = useOnline();
 
   // Kept as strings so the number inputs can be cleared while typing.
   const [name, setName] = useState(plan?.name ?? '');
@@ -186,11 +185,7 @@ export function PlanFormSheet({ plan, onClose }: Props) {
             </p>
           </div>
 
-          {!online && (
-            <p className="rounded-2xl bg-warn-soft px-4 py-3 text-sm text-warn">
-              Plan changes need a connection. Go online and try again.
-            </p>
-          )}
+          <OfflineNotice message="this plan is saved on the device and synced automatically later." />
 
           {error && (
             <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
@@ -198,14 +193,14 @@ export function PlanFormSheet({ plan, onClose }: Props) {
             </p>
           )}
 
-          <button type="submit" disabled={busy || !online} className={primaryButtonClass}>
+          <button type="submit" disabled={busy} className={primaryButtonClass}>
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add plan'}
           </button>
 
           {isEdit && (
             <button
               type="button"
-              disabled={busy || !online}
+              disabled={busy}
               onClick={() => setConfirmingDelete(true)}
               className={dangerButtonClass}
             >
