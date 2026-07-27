@@ -2,6 +2,7 @@ import type { Table } from 'dexie';
 import { db, setMeta } from '@/api/common/db';
 import { newUuid } from '@/utils/common/format';
 import { supabase } from '@/api/common/supabaseClient';
+import { pushRouterState } from '@/api/sync/routerBridge';
 import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/clients.types';
 import type { Payment } from '@/types/payments/payments.types';
 import type {
@@ -97,15 +98,25 @@ export async function flushOutbox(): Promise<{ flushed: number; failed: number }
 
   let flushed = 0;
   let failed = 0;
+  let connectionEventsFlushed = false;
 
   for (const item of items) {
     const ok = await pushOutboxItem(item);
     if (ok) {
       await db.outbox.delete(item.client_uuid);
       flushed += 1;
+      if (item.kind === 'connection_event') connectionEventsFlushed = true;
     } else {
       failed += 1;
     }
+  }
+
+  if (connectionEventsFlushed) {
+    // Now that the events exist server-side, have the Edge Function assert the
+    // state on the MikroTik. Before pullAll, so the executed_on_router flag it
+    // sets is picked up by the same pull. Best-effort: a failure leaves the
+    // events unexecuted for the scheduled sweep to retry.
+    await pushRouterState();
   }
 
   if (flushed > 0) {

@@ -1,7 +1,13 @@
 import { db } from '@/api/common/db';
 import { newUuid } from '@/utils/common/format';
 import { queueEntityWrite, settleWrite } from '@/api/sync/syncEngine';
-import type { Room, Router } from '@/types/rooms/rooms.types';
+import { supabase } from '@/api/common/supabaseClient';
+import type {
+  MikrotikCredentials,
+  MikrotikStatus,
+  Room,
+  Router,
+} from '@/types/rooms/rooms.types';
 
 // SuperAdmin CRUD for rooms and their (at most one) router. Writes go through
 // the outbox so rooms can be managed offline; the guards below read the local
@@ -147,4 +153,96 @@ export async function softDeleteRoom(id: string): Promise<string | null> {
   if (router) await detachRouter(router.id);
 
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// MikroTik API connection
+//
+// Deliberately outside the outbox, unlike every other write in this file.
+// Router credentials must not be mirrored into Dexie — IndexedDB is readable by
+// anyone with the device — and a connection cannot be tested offline anyway.
+// So these two are online-only calls into the Edge Function, which owns both
+// the credentials and the actual TCP session to the router.
+// ---------------------------------------------------------------------------
+
+/** Split `host:port` typed into one field, the way the MikroTik app accepts it. */
+function splitAddress(address: string, tls: boolean): { host: string; port: number } {
+  const trimmed = address.trim().replace(/^\w+:\/\//, '');
+  const colon = trimmed.lastIndexOf(':');
+
+  if (colon > 0) {
+    const port = Number(trimmed.slice(colon + 1));
+    if (Number.isInteger(port) && port > 0 && port <= 65535) {
+      return { host: trimmed.slice(0, colon), port };
+    }
+  }
+  return { host: trimmed, port: tls ? 8729 : 8728 };
+}
+
+export interface MikrotikConnectResult {
+  status: MikrotikStatus | null;
+  error: string | null;
+}
+
+/**
+ * Save the connection and immediately verify it.
+ *
+ * Nothing is stored unless the router actually answers and the credentials
+ * work, so "connected" in Settings always means a session succeeded rather
+ * than merely that a form was filled in.
+ */
+export async function connectMikrotik(
+  input: MikrotikCredentials,
+): Promise<MikrotikConnectResult> {
+  const { host, port } = splitAddress(input.address, input.tls);
+
+  if (!host) return { status: null, error: 'Enter the router address.' };
+  if (!input.username.trim()) return { status: null, error: 'Enter the API username.' };
+  if (!input.password) return { status: null, error: 'Enter the API password.' };
+
+  const { data, error } = await supabase.functions.invoke('mikrotik-sync', {
+    body: {
+      action: 'configure',
+      host,
+      port,
+      tls: input.tls,
+      username: input.username.trim(),
+      password: input.password,
+      ca_cert: input.caCert.trim() || null,
+    },
+  });
+
+  if (error) return { status: null, error: error.message };
+
+  const body = data as { ok?: boolean; status?: MikrotikStatus; detail?: string } | null;
+  if (!body?.ok) {
+    return { status: body?.status ?? null, error: body?.detail ?? 'Could not reach the router.' };
+  }
+  return { status: body.status ?? null, error: null };
+}
+
+/** Read the stored connection. Never includes the password. */
+export async function readMikrotikStatus(): Promise<MikrotikConnectResult> {
+  const { data, error } = await supabase.functions.invoke('mikrotik-sync', {
+    body: { action: 'status' },
+  });
+
+  if (error) return { status: null, error: error.message };
+
+  const body = data as { ok?: boolean; status?: MikrotikStatus; detail?: string } | null;
+  if (!body?.ok) return { status: null, error: body?.detail ?? 'Could not read router settings.' };
+  return { status: body.status ?? null, error: null };
+}
+
+/** Re-test the stored credentials without changing them. */
+export async function testMikrotik(): Promise<MikrotikConnectResult> {
+  const { data, error } = await supabase.functions.invoke('mikrotik-sync', {
+    body: { action: 'probe' },
+  });
+
+  if (error) return { status: null, error: error.message };
+
+  const body = data as { ok?: boolean; status?: MikrotikStatus; detail?: string } | null;
+  if (!body?.ok) return { status: null, error: body?.detail ?? 'Could not reach the router.' };
+  return { status: body.status ?? null, error: null };
 }

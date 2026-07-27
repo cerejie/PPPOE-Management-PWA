@@ -37,7 +37,10 @@ export interface ConnectionEvent {
   performed_at: string;
   note: string | null;
   client_uuid: string;
+  /** Set once the Edge Function has asserted this state on the MikroTik. */
   executed_on_router: boolean;
+  /** Why the last router push failed. Optional: added by the dispatch migration. */
+  router_error?: string | null;
   created_at: string;
   updated_at: string;
 }

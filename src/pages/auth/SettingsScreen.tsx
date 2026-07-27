@@ -9,6 +9,7 @@ import { supabase } from '@/api/common/supabaseClient';
 import { pullAll } from '@/api/sync/syncEngine';
 import { useOnline } from '@/hooks/sync/useSyncStatus';
 import { useAuth } from '@/store/auth/AuthContext';
+import { MikrotikSection } from '@/components/rooms/settings/MikrotikSection';
 
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -241,6 +242,8 @@ export function SettingsScreen() {
               <ManageLink to="/plans" label="Plans" hint="Price, speed and validity" />
               <ManageLink to="/clients" label="Clients" hint="Add or edit client accounts" />
             </SectionCard>
+
+            <MikrotikSection online={online} />
 
             <StaffSection />
           </>

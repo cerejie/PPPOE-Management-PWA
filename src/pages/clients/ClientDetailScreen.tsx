@@ -10,6 +10,7 @@ import { useClient, useClientOutbox } from '@/hooks/clients/useClients';
 import { usePlans } from '@/hooks/plans/usePlans';
 import { useRooms } from '@/hooks/rooms/useRooms';
 import { useClientLedger } from '@/hooks/clients/useClientLedger';
+import { useRouterPushStatus } from '@/hooks/clients/useRouterPush';
 import { LedgerSheet } from '@/components/clients/sheets/LedgerSheet';
 import { PauseSheet } from '@/components/clients/sheets/PauseSheet';
 
@@ -36,6 +37,7 @@ export function ClientDetailScreen() {
   const plans = usePlans();
   const outbox = useClientOutbox(id);
   const ledger = useClientLedger(id);
+  const routerPush = useRouterPushStatus(id);
 
   const [showPayment, setShowPayment] = useState(false);
   const [showLedger, setShowLedger] = useState(false);
@@ -145,6 +147,14 @@ export function ClientDetailScreen() {
             <p className="mt-4 rounded-2xl bg-warn-soft px-3 py-2 text-xs font-medium text-warn">
               {pendingEvents.length} connection change{pendingEvents.length > 1 ? 's' : ''} pending
               sync
+            </p>
+          )}
+          {pendingEvents.length === 0 && routerPush && routerPush.unapplied > 0 && (
+            // Synced to Supabase but not yet asserted on the MikroTik — the line
+            // may still be up. Retried by the scheduled sweep.
+            <p className="mt-4 rounded-2xl bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+              Not applied on the router yet — the line may still be {connected ? 'down' : 'up'}.
+              {routerPush.error ? ` ${routerPush.error}` : ' Retrying automatically.'}
             </p>
           )}
         </section>
