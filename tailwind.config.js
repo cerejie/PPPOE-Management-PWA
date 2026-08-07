@@ -59,9 +59,12 @@ export default {
       spacing: {
         'safe-top': 'env(safe-area-inset-top)',
         'safe-bottom': 'env(safe-area-inset-bottom)',
-        // Clearance for the floating tab bar: bar height + gap + safe area.
-        'tabbar': 'calc(5.5rem + env(safe-area-inset-bottom))',
-        'above-tabbar': 'calc(6.25rem + env(safe-area-inset-bottom))',
+        // The tab bar's own offset from the bottom of the viewport.
+        'tabbar-dock': 'var(--tabbar-dock)',
+        // Clearance for the floating tab bar: bar height (~66px) + breathing
+        // room + whatever the bar itself is docked at, so the three stay in step.
+        'tabbar': 'calc(4.75rem + var(--tabbar-dock))',
+        'above-tabbar': 'calc(5.5rem + var(--tabbar-dock))',
       },
       fontFamily: {
         sans: [

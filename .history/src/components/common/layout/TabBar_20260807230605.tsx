@@ -86,7 +86,7 @@ const tabs: Tab[] = [
 export function TabBar() {
   return (
     <nav className="z-30 flex shrink-0 justify-center" aria-label="Main navigation">
-      <div className="w-full max-w-app px-10 pb-tabbar-dock">
+      <div className="w-full max-w-app px- pb-tabbar-dock">
         <div className="flex items-center gap-0.5 rounded-3xl border border-line/80 bg-surface/85 p-1.5 shadow-float backdrop-blur-xl">
           {tabs.map((tab) => (
             <NavLink
