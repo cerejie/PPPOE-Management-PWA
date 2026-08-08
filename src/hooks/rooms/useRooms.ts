@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/api/common/db';
-import type { Room } from '@/types/rooms/rooms.types';
+import type { Room } from '@/types/rooms/Rooms.types';
 
 export function useRooms(): Room[] | undefined {
   return useLiveQuery(async () => {

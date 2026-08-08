@@ -45,23 +45,28 @@ Anything shared by more than one module lives in that type's `common/` folder.
 
 ```
 src/api/        — transport. common/ (supabaseClient, Dexie db), sync/ (syncEngine)
-src/components/ — common/{layout,overlays,badges,buttons,inputs,notices}, then <module>/sheets/
-src/pages/      — <module>/<Name>Screen.tsx — full-page routes only
+src/app/        — App.tsx, main.tsx, providers/, layouts/, config/env.ts
+src/common/     — shared by every module: components/{layout,overlays,badges,buttons,inputs,notices},
+                  stores/ (createInstanceStore), styles/ (Theme/Global/Form/Motion/A11y .css.ts), utils/
+src/components/ — <module>/<category>/ — e.g. clients/cards/, payments/sheet/, settings/lists/
+src/constants/  — <module>/<Thing>.constants.ts — typed config arrays and route builders
+src/pages/      — <Name>Page.tsx, flat, plus a co-located <Name>Page.css.ts
+src/routes/     — AppRoutes.tsx, ProtectedRoutes.tsx
 src/hooks/      — <module>/use<Thing>.ts — one hook file per topic
-src/services/   — <module>/<module>.actions.ts — all writes for that module
-src/store/      — auth/AuthContext.tsx
-src/types/      — <module>/<module>.types.ts — domain types mirroring the schema
-src/utils/      — common/format.ts, clients/ledgerPdf.ts
-src/styles/     — common/formStyles.ts
+src/services/   — <module>/<Module>.service.ts — all writes for that module
+src/stores/     — auth/Auth.store.ts
+src/types/      — <module>/<Module>.types.ts — domain types mirroring the schema
+src/utils/      — <module>/<Thing>.utils.ts (e.g. clients/ClientLedgerPdf.utils.ts)
 supabase/migrations/ — numbered SQL, applied in order by `supabase db push`
 supabase/functions/  — Edge Functions (create-staff: SuperAdmin-only)
 graphify-out/   — generated knowledge graph; never hand-edit
 ```
 
-Modules are `clients`, `payments`, `plans`, `rooms`, `sync`, `auth`. A module
-folder only appears under a type when that module actually has files of that
-type — do not create empty scaffolding. Routers have no module of their own;
-their types, hooks, and CRUD live under `rooms`, which owns them.
+Modules are `clients`, `payments`, `plans`, `rooms`, `sync`, `auth`, `settings`
+and `dashboard`. A module folder only appears under a type when that module
+actually has files of that type — do not create empty scaffolding. Routers have
+no module of their own; their types, hooks, and CRUD live under `rooms`, which
+owns them.
 
 Every import uses the `@/` alias (`@/hooks/plans/usePlans`), never a relative
 path — a file's location is then independent of who imports it.
@@ -100,9 +105,9 @@ Reads and writes use different paths, deliberately:
 - **Every feature works offline except signing in and creating a staff
   account** — those two need the auth server, and nothing else does. A form
   must never be disabled on `!online`; its write is queueable, so show
-  `components/common/notices/OfflineNotice.tsx` and let the submit through.
+  `common/components/notices/OfflineNotice.tsx` and let the submit through.
 - Auth survives going offline: `getSession()` returns null once the access
-  token expires and the refresh cannot reach the server, so `AuthContext`
+  token expires and the refresh cannot reach the server, so `Auth.store.ts`
   falls back to `sync_meta.auth_user_id` (the last user this device signed in
   as) and keeps the app usable. `authenticated`, not `session`, is what gates
   the router. Only a Supabase `SIGNED_OUT` event — the server actually
@@ -180,24 +185,49 @@ next time.
 
 Verified consistent across the codebase; follow these for new code.
 
-- Full-page routes: `pages/<module>/<Name>Screen.tsx`. Modal flows:
-  `components/<module>/sheets/<Name>Sheet.tsx`.
+- Full-page routes: `pages/<Name>Page.tsx`, flat, with its stylesheet beside it
+  as `pages/<Name>Page.css.ts`. Modal flows:
+  `components/<module>/sheet/<Name>Sheet.tsx`.
+- **Every screen and sheet is a ViewModel hook plus a presentation component.**
+  The hook (`hooks/<module>/use<Thing>.ts`) owns state, derived values, effects
+  and submit logic and returns an explicitly exported interface; the component
+  renders it and nothing else.
 - All write/mutation functions for a module live in
-  `services/<module>/<module>.actions.ts` — one file per module, not per screen.
+  `services/<module>/<Module>.service.ts` — one file per module, not per screen.
 - Named exports only — there is not a single `export default` in `src/`.
 - Hooks are one topic per file under `hooks/<module>/use<Thing>.ts` (e.g.
   `useClients.ts`, `useClientLedger.ts`, `useDashboardStats.ts`), not a shared
   `hooks.ts` barrel. `hooks/sync/useSyncStatus.ts` also owns `useOnline` and
   `useBackgroundSync` — don't split those further.
-- Domain types live in `types/<module>/<module>.types.ts`, one file per
+- Domain types live in `types/<module>/<Module>.types.ts`, one file per
   module. Cross-module type references import directly from the owning
-  module's types file (e.g. `sync.types.ts` imports `ConnectionAction` from
-  `types/clients/clients.types`) rather than duplicating the type.
-- Styling is Tailwind against CSS-variable tokens (`bg-surface`, `text-muted`,
-  `text-danger`). Raw palette classes (`text-gray-500`) and hex values bypass
-  theming — use the tokens in `tailwind.config.js` / `index.css`.
-- Shared form/button classes live in `styles/common/formStyles.ts`; reuse them
-  rather than re-typing the class strings.
+  module's types file (e.g. `Sync.types.ts` imports `ConnectionAction` from
+  `types/clients/Clients.types`) rather than duplicating the type.
+- **No `useState` anywhere.** Genuinely global state is a module-level Zustand
+  store (`stores/auth/Auth.store.ts`, `common/stores/Connectivity.store.ts`);
+  per-component UI state uses `useInstanceStore` from
+  `common/stores/createInstanceStore.ts`, which creates one real store per
+  mounted component so two open sheets cannot fight over one slice; DOM nodes
+  and in-flight pointers are `useRef`, not state at all.
+- Styling is Vanilla Extract. Colours come from the contract in
+  `common/styles/Theme.css.ts`, stored as bare `R G B` triples and read through
+  `solid()` / `alpha()` in `common/styles/Token.utils.ts` — never interpolate a
+  triple straight into a property, and never write a hex value in a component.
+  A `.css.ts` module may only export serialisable values, which is why those
+  helpers live outside `Theme.css.ts`.
+- Shared form/button classes live in `common/styles/Form.css.ts`; reuse them
+  rather than re-declaring a style. Repeated UI belongs in `common/components/`
+  (`EmptyState`, `LoadingNotice`, `FilterChip`, `SearchInput`, `SelectField`,
+  `SectionCard`).
+- A typed config array beats duplicated JSX: `constants/<module>/*.constants.ts`
+  holds things like `DASHBOARD_STAT_CARDS`, `CLIENT_FILTER_CHIPS` and
+  `MANAGE_LINKS`. Route strings live there too
+  (`constants/clients/ClientRoutes.constants.ts`) — every screen linking into
+  the client list must use those builders so links cannot drift from the query
+  parameters `useClientsPage` reads.
+- Navigation is a `<Link to>`; a callback prop (`onX`) is for genuine actions
+  like opening a sheet. Sub-components take a `to` string so route knowledge
+  stays in the constants file.
 
 ## Do not
 
@@ -208,15 +238,15 @@ Verified consistent across the codebase; follow these for new code.
 - Never add `runtimeCaching` for Supabase in `vite.config.ts` — API data is
   cached in Dexie, and a second stale cache layer would fight it.
 - Never emit `₱` into a PDF: jsPDF's Helvetica has no glyph for it. Use the
-  `PHP `-prefixed helper in `ledgerPdf.ts`.
+  `PHP `-prefixed helper in `ClientLedgerPdf.utils.ts`.
 - Never treat a paused client as expiring — a pause freezes the clock, so
   paused clients are excluded from expiry filters, dashboard counts, and
   `sweepExpiredClients`.
 - Never make the tab bar `position: fixed` again. It is the last row of the
-  shell's `h-dvh` flex column in `App.tsx`; as a fixed element it drifted on an
-  installed iOS PWA, where `env(safe-area-inset-bottom)` settles only after a
-  re-layout. `Screen` uses `min-h-full` for the same reason — the shell owns the
-  viewport height.
+  `height: 100dvh` flex column in `app/layouts/MainLayout.css.ts`; as a fixed
+  element it drifted on an installed iOS PWA, where `env(safe-area-inset-bottom)`
+  settles only after a re-layout. `Screen` uses `min-height: 100%` for the same
+  reason — the shell owns the viewport height.
 - Never allow `app_users.username` to be edited. The login email is derived from
   it (`usernameToEmail`), so changing it locks the account out; only
   `display_name` is writable, enforced again server-side by

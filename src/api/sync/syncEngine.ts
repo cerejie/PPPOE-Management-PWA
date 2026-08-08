@@ -1,11 +1,11 @@
 import type { Table } from 'dexie';
 import { db, setMeta } from '@/api/common/db';
-import { newUuid } from '@/utils/common/format';
+import { newUuid } from '@/common/utils/Format.utils';
 import { supabase } from '@/api/common/supabaseClient';
 import { pushRouterState } from '@/api/sync/routerBridge';
-import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/clients.types';
-import type { Payment } from '@/types/payments/payments.types';
-import { isClientEvent } from '@/types/sync/sync.types';
+import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/Clients.types';
+import type { Payment } from '@/types/payments/Payments.types';
+import { isClientEvent } from '@/types/sync/Sync.types';
 import type {
   EntityTable,
   OutboxConnectionEventPayload,
@@ -15,7 +15,7 @@ import type {
   OutboxPauseEventPayload,
   OutboxPaymentPayload,
   OutboxStatus,
-} from '@/types/sync/sync.types';
+} from '@/types/sync/Sync.types';
 
 const SIX_MONTHS_MS = 1000 * 60 * 60 * 24 * 183;
 

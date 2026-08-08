@@ -1,8 +1,8 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/api/common/db';
-import { daysUntil } from '@/utils/common/format';
-import type { Client, ConnectionStatus } from '@/types/clients/clients.types';
-import { isClientEvent, type OutboxItem } from '@/types/sync/sync.types';
+import { daysUntil } from '@/common/utils/Format.utils';
+import type { Client, ConnectionStatus } from '@/types/clients/Clients.types';
+import { isClientEvent, type OutboxItem } from '@/types/sync/Sync.types';
 
 export type ExpiryFilter = 'all' | 'expiring' | 'expired';
 

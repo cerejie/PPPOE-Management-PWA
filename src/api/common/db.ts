@@ -1,10 +1,10 @@
 import Dexie, { type Table } from 'dexie';
-import type { AppUser } from '@/types/auth/auth.types';
-import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/clients.types';
-import type { Payment } from '@/types/payments/payments.types';
-import type { Plan } from '@/types/plans/plans.types';
-import type { Room, Router } from '@/types/rooms/rooms.types';
-import type { OutboxItem, SyncMeta } from '@/types/sync/sync.types';
+import type { AppUser } from '@/types/auth/Auth.types';
+import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/Clients.types';
+import type { Payment } from '@/types/payments/Payments.types';
+import type { Plan } from '@/types/plans/Plans.types';
+import type { Room, Router } from '@/types/rooms/Rooms.types';
+import type { OutboxItem, SyncMeta } from '@/types/sync/Sync.types';
 
 /**
  * Local cache + outbox. Reads always come from here so the UI renders

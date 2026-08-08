@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { entityWriteStates, type EntityWriteState } from '@/api/sync/syncEngine';
-import type { EntityTable } from '@/types/sync/sync.types';
+import type { EntityTable } from '@/types/sync/Sync.types';
 
 /**
  * row_id -> sync state for rows of `table` that are still queued or rejected,

@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/api/common/db';
-import type { Plan } from '@/types/plans/plans.types';
+import type { Plan } from '@/types/plans/Plans.types';
 
 export function usePlans(): Plan[] | undefined {
   return useLiveQuery(

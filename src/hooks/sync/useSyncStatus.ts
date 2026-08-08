@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useQuery } from '@tanstack/react-query';
 import { db } from '@/api/common/db';
 import { pullAll } from '@/api/sync/syncEngine';
-import { sweepExpiredClients } from '@/services/payments/payments.actions';
-import { useAuth } from '@/store/auth/AuthContext';
+import { sweepExpiredClients } from '@/services/payments/Payments.service';
+import { useAuthStore } from '@/stores/auth/Auth.store';
+import { useConnectivityStore } from '@/common/stores/Connectivity.store';
 
 export interface SyncStatus {
   online: boolean;
@@ -14,18 +15,7 @@ export interface SyncStatus {
 }
 
 export function useOnline(): boolean {
-  const [online, setOnline] = useState(navigator.onLine);
-  useEffect(() => {
-    const up = () => setOnline(true);
-    const down = () => setOnline(false);
-    window.addEventListener('online', up);
-    window.addEventListener('offline', down);
-    return () => {
-      window.removeEventListener('online', up);
-      window.removeEventListener('offline', down);
-    };
-  }, []);
-  return online;
+  return useConnectivityStore((s) => s.online);
 }
 
 /**
@@ -39,8 +29,7 @@ export function useOnline(): boolean {
  */
 export function useBackgroundSync(): void {
   const online = useOnline();
-  const { appUser } = useAuth();
-  const performedBy = appUser?.id ?? null;
+  const performedBy = useAuthStore((s) => s.appUser?.id ?? null);
 
   useQuery({
     queryKey: ['pull-all'],

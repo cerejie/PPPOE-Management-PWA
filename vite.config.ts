@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
@@ -11,6 +12,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    vanillaExtractPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],

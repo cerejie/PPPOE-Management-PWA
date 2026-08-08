@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/api/common/db';
-import type { Router } from '@/types/rooms/rooms.types';
+import type { Router } from '@/types/rooms/Rooms.types';
 
 export function useRouters(): Router[] | undefined {
   return useLiveQuery(async () => {

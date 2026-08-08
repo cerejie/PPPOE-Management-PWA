@@ -7,7 +7,8 @@ support (offline reads + offline payment entry with idempotent sync).
 ## Stack
 
 - Vite + React + TypeScript (strict)
-- Tailwind CSS
+- Vanilla Extract for styling (typed, zero-runtime CSS)
+- Zustand for state — no `useState` anywhere in `src/`
 - Supabase (Postgres, Auth, RLS) — no custom backend
 - Dexie (IndexedDB) for the offline cache and outbox
 - TanStack Query for background revalidation
@@ -167,7 +168,8 @@ Failed items appear in the Sync screen (tap the header chip) for review.
 ## Structure
 
 Hybrid type-based: top level is the technical type, second level is the
-business module (`clients`, `payments`, `plans`, `rooms`, `sync`, `auth`).
+business module (`clients`, `payments`, `plans`, `rooms`, `sync`, `auth`,
+`settings`, `dashboard`).
 
 ```
 supabase/
@@ -175,14 +177,17 @@ supabase/
   functions/create-staff/  # SuperAdmin-only staff account creation
 src/
   api/                  # common/ (supabase client, Dexie schema), sync/ (sync engine)
-  components/           # common/ (Screen, Sheet, TabBar, badges) + <module>/sheets/
-  pages/                # <module>/<Name>Screen.tsx — dashboard, list, detail, forms
-  hooks/                # <module>/use<Thing>.ts
-  services/             # <module>/<module>.actions.ts — all writes for that module
-  store/                # auth/AuthContext.tsx — session/role context
-  types/                # <module>/<module>.types.ts
-  utils/                # common/format.ts, clients/ledgerPdf.ts
-  styles/               # common/formStyles.ts
+  app/                  # App, main, providers/, layouts/, config/
+  common/               # components/, stores/, styles/, utils/ — shared by every module
+  components/           # <module>/<category>/ — e.g. clients/cards/, payments/sheet/
+  constants/            # <module>/<Thing>.constants.ts — typed config arrays, routes
+  pages/                # <Name>Page.tsx (flat) + co-located <Name>Page.css.ts
+  routes/               # AppRoutes.tsx, ProtectedRoutes.tsx
+  hooks/                # <module>/use<Thing>.ts — one ViewModel hook per screen/sheet
+  services/             # <module>/<Module>.service.ts — all writes for that module
+  stores/               # auth/Auth.store.ts — session/role, outside React
+  types/                # <module>/<Module>.types.ts
+  utils/                # <module>/<Thing>.utils.ts
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the full architecture and conventions.

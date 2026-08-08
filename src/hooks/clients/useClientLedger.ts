@@ -1,14 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/api/common/db';
-import { formatDuration } from '@/utils/common/format';
-import { isClientEvent } from '@/types/sync/sync.types';
+import { formatDuration } from '@/common/utils/Format.utils';
+import { isClientEvent } from '@/types/sync/Sync.types';
 import type {
   OutboxConnectionEventPayload,
   OutboxPauseEventPayload,
   OutboxPaymentPayload,
-} from '@/types/sync/sync.types';
+} from '@/types/sync/Sync.types';
 
-import type { LedgerKind } from '@/types/clients/clients.types';
+import type { LedgerKind } from '@/types/clients/Clients.types';
 
 export type { LedgerKind };
 

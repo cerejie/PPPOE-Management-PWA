@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { readMikrotikStatus } from '@/services/rooms/rooms.actions';
-import type { MikrotikStatus } from '@/types/rooms/rooms.types';
+import { useCallback, useEffect } from 'react';
+import { useStore } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
+import { useInstanceStore } from '@/common/stores/createInstanceStore';
+import { readMikrotikStatus } from '@/services/rooms/Rooms.service';
+import type { MikrotikStatus } from '@/types/rooms/Rooms.types';
+
+interface MikrotikStatusState {
+  status: MikrotikStatus | null;
+  loading: boolean;
+  error: string | null;
+}
 
 /**
  * The stored MikroTik connection, read through the Edge Function.
@@ -10,17 +19,27 @@ import type { MikrotikStatus } from '@/types/rooms/rooms.types';
  * That also makes this the one screen that genuinely needs a connection.
  */
 export function useMikrotikStatus(enabled: boolean) {
-  const [status, setStatus] = useState<MikrotikStatus | null>(null);
-  const [loading, setLoading] = useState(enabled);
-  const [error, setError] = useState<string | null>(null);
+  const store = useInstanceStore<MikrotikStatusState>(() => ({
+    status: null,
+    loading: enabled,
+    error: null,
+  }));
+
+  const { status, loading, error } = useStore(
+    store,
+    useShallow((s) => s),
+  );
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    store.setState({ loading: true });
     const result = await readMikrotikStatus();
-    setStatus(result.status);
-    setError(result.error);
-    setLoading(false);
-  }, []);
+    store.setState({ status: result.status, error: result.error, loading: false });
+  }, [store]);
+
+  const setStatus = useCallback(
+    (next: MikrotikStatus | null) => store.setState({ status: next }),
+    [store],
+  );
 
   useEffect(() => {
     if (!enabled) return;
