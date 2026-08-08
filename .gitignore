@@ -26,3 +26,5 @@ supabase/.temp
 graphify-out/
 
 CLAUDE.md
+
+.claude/
