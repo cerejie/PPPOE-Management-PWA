@@ -1,0 +1,55 @@
+{
+  "$comment": "Copy to <project>/.claude/settings.json and commit it. Machine-local overrides go in settings.local.json (gitignored).",
+  "permissions": {
+    "allow": [
+      "Bash(yarn:*)",
+      "Bash(node scripts/structure-lint.mjs:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(tsc:*)",
+      "Read(./**)",
+      "Grep(./**)",
+      "Glob(./**)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(pnpm:*)",
+      "Bash(bun:*)",
+      "Bash(git push --force:*)",
+      "Bash(supabase db reset:*)",
+      "Bash(rm -rf:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-package-manager.mjs"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/lint-changed.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}
