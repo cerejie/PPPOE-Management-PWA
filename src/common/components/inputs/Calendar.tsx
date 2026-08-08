@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useStore } from 'zustand';
 import { useInstanceStore } from '@/common/stores/createInstanceStore';
 import { toDateInputValue, todayInputValue } from '@/common/utils/Format.utils';
-import * as styles from '@/common/components/inputs/Calendar.css';
+import * as styles from '@/styles/common/inputs/Calendar.css';
 
 interface CalendarProps {
   /** Local calendar day, `YYYY-MM-DD`, or '' when nothing is picked yet. */

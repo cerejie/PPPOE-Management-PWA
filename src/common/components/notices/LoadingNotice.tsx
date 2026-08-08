@@ -1,4 +1,4 @@
-import * as styles from '@/common/components/notices/LoadingNotice.css';
+import * as styles from '@/styles/common/notices/LoadingNotice.css';
 
 interface Props {
   label?: string;

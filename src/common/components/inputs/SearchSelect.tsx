@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '@/common/stores/createInstanceStore';
-import * as styles from '@/common/components/inputs/SearchSelect.css';
+import * as styles from '@/styles/common/inputs/SearchSelect.css';
 
 export interface SearchSelectOption {
   value: string;

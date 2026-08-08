@@ -1,5 +1,5 @@
 import { daysUntil } from '@/common/utils/Format.utils';
-import { caption, pill, type PillTone } from '@/common/styles/Badge.css';
+import { caption, pill, type PillTone } from '@/styles/global/Badge.css';
 
 interface Props {
   expiresAt: string | null;

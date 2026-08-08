@@ -1,5 +1,5 @@
 import { ExpiryBadge } from '@/common/components/badges/ExpiryBadge';
-import * as styles from '@/components/clients/cards/ClientProfileCard.css';
+import * as styles from '@/styles/pages/clients/cards/ClientProfileCard.css';
 import { CLIENT_PROFILE_FIELDS } from '@/constants/clients/ClientProfile.constants';
 import { formatDate } from '@/common/utils/Format.utils';
 import type { Client } from '@/types/clients/Clients.types';

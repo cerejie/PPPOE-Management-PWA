@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import * as styles from '@/common/components/layout/SectionCard.css';
+import * as styles from '@/styles/common/layout/SectionCard.css';
 
 interface Props {
   title: string;

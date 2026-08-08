@@ -2,7 +2,7 @@ import { Sheet } from '@/common/components/overlays/Sheet';
 import { ConfirmDialog } from '@/common/components/overlays/ConfirmDialog';
 import { FilterChip } from '@/common/components/buttons/FilterChip';
 import { LedgerRow } from '@/components/clients/sheet/LedgerRow';
-import * as styles from '@/components/clients/sheet/LedgerSheet.css';
+import * as styles from '@/styles/pages/clients/sheet/LedgerSheet.css';
 import { LEDGER_FILTERS } from '@/constants/clients/ClientLedger.constants';
 import { useLedgerSheet } from '@/hooks/clients/useLedgerSheet';
 import { describeLedgerDeletion } from '@/utils/clients/ClientLedger.utils';

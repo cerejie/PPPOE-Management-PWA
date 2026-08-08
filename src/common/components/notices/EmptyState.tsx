@@ -1,4 +1,4 @@
-import * as styles from '@/common/components/notices/EmptyState.css';
+import * as styles from '@/styles/common/notices/EmptyState.css';
 
 interface Props {
   /** Emoji shown above the title — decorative only. */

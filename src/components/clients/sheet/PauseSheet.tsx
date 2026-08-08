@@ -1,6 +1,6 @@
 import { Sheet } from '@/common/components/overlays/Sheet';
 import { OfflineNotice } from '@/common/components/notices/OfflineNotice';
-import * as form from '@/common/styles/Form.css';
+import * as form from '@/styles/global/Form.css';
 import { usePauseForm } from '@/hooks/clients/usePauseForm';
 import type { Client } from '@/types/clients/Clients.types';
 

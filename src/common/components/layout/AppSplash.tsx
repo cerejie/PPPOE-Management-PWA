@@ -1,5 +1,5 @@
-import * as styles from '@/common/components/layout/AppSplash.css';
-import { srOnly } from '@/common/styles/A11y.css';
+import * as styles from '@/styles/common/layout/AppSplash.css';
+import { srOnly } from '@/styles/global/A11y.css';
 
 /**
  * Shown while the session is being restored. Reuses the login page's brand tile

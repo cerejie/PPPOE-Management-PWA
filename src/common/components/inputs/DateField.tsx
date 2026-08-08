@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 import { useInstanceStore } from '@/common/stores/createInstanceStore';
 import { Calendar } from '@/common/components/inputs/Calendar';
 import { formatDate, fromDateInputStart } from '@/common/utils/Format.utils';
-import * as styles from '@/common/components/inputs/DateField.css';
+import * as styles from '@/styles/common/inputs/DateField.css';
 
 interface DateFieldProps {
   id: string;

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { StatusDot } from '@/common/components/badges/StatusDot';
 import { ExpiryBadge } from '@/common/components/badges/ExpiryBadge';
-import * as styles from '@/components/dashboard/lists/ExpiringClientRow.css';
+import * as styles from '@/styles/pages/dashboard/lists/ExpiringClientRow.css';
 import { formatDate } from '@/common/utils/Format.utils';
 import type { Client } from '@/types/clients/Clients.types';
 

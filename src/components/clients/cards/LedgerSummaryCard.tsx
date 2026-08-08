@@ -1,4 +1,4 @@
-import * as styles from '@/components/clients/cards/LedgerSummaryCard.css';
+import * as styles from '@/styles/pages/clients/cards/LedgerSummaryCard.css';
 import { formatDateTime, formatDuration, formatMoney, pluralize } from '@/common/utils/Format.utils';
 import type { Ledger } from '@/hooks/clients/useClientLedger';
 

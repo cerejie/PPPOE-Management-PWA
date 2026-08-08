@@ -1,5 +1,5 @@
 import type { EntityWriteState } from '@/api/sync/syncEngine';
-import { pill } from '@/common/styles/Badge.css';
+import { pill } from '@/styles/global/Badge.css';
 
 interface Props {
   /** Undefined when the row has no queued write — nothing is rendered. */

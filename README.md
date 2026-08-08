@@ -178,10 +178,12 @@ supabase/
 src/
   api/                  # common/ (supabase client, Dexie schema), sync/ (sync engine)
   app/                  # App, main, providers/, layouts/, config/
-  common/               # components/, stores/, styles/, utils/ — shared by every module
-  components/           # <module>/<category>/ — e.g. clients/cards/, payments/sheet/
+  common/               # components/, stores/, utils/ — shared by every module
+  components/           # <module>/<category>/ — e.g. clients/cards/, payments/sheet/ (.tsx only)
   constants/            # <module>/<Thing>.constants.ts — typed config arrays, routes
-  pages/                # <Name>Page.tsx (flat) + co-located <Name>Page.css.ts
+  pages/                # <module>/<Name>Page.tsx — secondary pages nest (clients/detail/)
+  styles/               # every .css.ts — global/, app/, common/,
+                        #   pages/<module>/ (routed), features/<module>/ (unrouted)
   routes/               # AppRoutes.tsx, ProtectedRoutes.tsx
   hooks/                # <module>/use<Thing>.ts — one ViewModel hook per screen/sheet
   services/             # <module>/<Module>.service.ts — all writes for that module

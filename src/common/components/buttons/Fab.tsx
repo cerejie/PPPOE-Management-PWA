@@ -1,4 +1,4 @@
-import * as styles from '@/common/components/buttons/Fab.css';
+import * as styles from '@/styles/common/buttons/Fab.css';
 
 interface FabProps {
   onClick: () => void;

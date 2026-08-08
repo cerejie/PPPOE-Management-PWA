@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import * as styles from '@/common/components/layout/TabBar.css';
+import * as styles from '@/styles/common/layout/TabBar.css';
 
 interface Tab {
   to: string;

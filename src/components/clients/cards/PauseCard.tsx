@@ -1,4 +1,4 @@
-import * as styles from '@/components/clients/cards/PauseCard.css';
+import * as styles from '@/styles/pages/clients/cards/PauseCard.css';
 import { formatDuration } from '@/common/utils/Format.utils';
 
 interface Props {

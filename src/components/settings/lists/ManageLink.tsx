@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import * as styles from '@/components/settings/lists/ManageLink.css';
+import * as styles from '@/styles/pages/settings/lists/ManageLink.css';
 
 interface Props {
   to: string;

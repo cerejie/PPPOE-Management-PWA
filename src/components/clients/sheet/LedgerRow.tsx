@@ -1,4 +1,4 @@
-import * as styles from '@/components/clients/sheet/LedgerSheet.css';
+import * as styles from '@/styles/pages/clients/sheet/LedgerSheet.css';
 import { LEDGER_KIND_ICON } from '@/constants/clients/ClientLedger.constants';
 import { formatDateTime, formatMoney } from '@/common/utils/Format.utils';
 import type { LedgerEntry } from '@/hooks/clients/useClientLedger';

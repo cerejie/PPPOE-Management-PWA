@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { relativeTimeFrom } from '@/common/utils/Format.utils';
 import { useSyncStatus } from '@/hooks/sync/useSyncStatus';
-import * as styles from '@/components/sync/widgets/SyncChip.css';
+import * as styles from '@/styles/pages/sync/widgets/SyncChip.css';
 
 /** Persistent header chip: Online / Offline / N pending + last-synced time. */
 export function SyncChip() {

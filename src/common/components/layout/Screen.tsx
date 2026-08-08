@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SyncChip } from '@/components/sync/widgets/SyncChip';
-import * as styles from '@/common/components/layout/Screen.css';
+import * as styles from '@/styles/common/layout/Screen.css';
 
 interface ScreenProps {
   title: string;

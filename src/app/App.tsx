@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/auth/Auth.store';
 import { AppRoutes } from '@/routes/AppRoutes';
-import { LoginPage } from '@/pages/LoginPage';
+import { LoginPage } from '@/pages/auth/LoginPage';
 import { AppSplash } from '@/common/components/layout/AppSplash';
 
 export function App() {

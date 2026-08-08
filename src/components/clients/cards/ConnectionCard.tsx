@@ -1,4 +1,4 @@
-import * as styles from '@/components/clients/cards/ConnectionCard.css';
+import * as styles from '@/styles/pages/clients/cards/ConnectionCard.css';
 import { formatDateTime, pluralize } from '@/common/utils/Format.utils';
 import type { RouterPushStatus } from '@/hooks/clients/useRouterPush';
 

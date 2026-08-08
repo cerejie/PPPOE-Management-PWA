@@ -1,6 +1,6 @@
-import * as form from '@/common/styles/Form.css';
-import { srOnly } from '@/common/styles/A11y.css';
-import * as styles from '@/components/settings/forms/NameEditor.css';
+import * as form from '@/styles/global/Form.css';
+import { srOnly } from '@/styles/global/A11y.css';
+import * as styles from '@/styles/pages/settings/forms/NameEditor.css';
 import { useRenameUserForm } from '@/hooks/auth/useRenameUserForm';
 import type { AppUser } from '@/types/auth/Auth.types';
 

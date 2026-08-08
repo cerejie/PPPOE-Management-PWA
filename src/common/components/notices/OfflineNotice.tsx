@@ -1,5 +1,5 @@
 import { useOnline } from '@/hooks/sync/useSyncStatus';
-import { notice } from '@/common/components/notices/OfflineNotice.css';
+import { notice } from '@/styles/common/notices/OfflineNotice.css';
 
 interface OfflineNoticeProps {
   /** Sentence completing "You're offline — …". */

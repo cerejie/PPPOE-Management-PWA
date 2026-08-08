@@ -1,4 +1,4 @@
-import * as styles from '@/common/components/buttons/FilterChip.css';
+import * as styles from '@/styles/common/buttons/FilterChip.css';
 
 export type FilterChipTone = 'raised' | 'flat';
 

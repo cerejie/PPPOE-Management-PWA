@@ -47,10 +47,11 @@ Anything shared by more than one module lives in that type's `common/` folder.
 src/api/        — transport. common/ (supabaseClient, Dexie db), sync/ (syncEngine)
 src/app/        — App.tsx, main.tsx, providers/, layouts/, config/env.ts
 src/common/     — shared by every module: components/{layout,overlays,badges,buttons,inputs,notices},
-                  stores/ (createInstanceStore), styles/ (Theme/Global/Form/Motion/A11y .css.ts), utils/
-src/components/ — <module>/<category>/ — e.g. clients/cards/, payments/sheet/, settings/lists/
+                  stores/ (createInstanceStore), utils/
+src/components/ — <module>/<category>/ — e.g. clients/cards/, payments/sheet/, settings/lists/ — .tsx only
 src/constants/  — <module>/<Thing>.constants.ts — typed config arrays and route builders
-src/pages/      — <Name>Page.tsx, flat, plus a co-located <Name>Page.css.ts
+src/pages/      — <module>/<Name>Page.tsx — secondary pages nest (clients/detail/)
+src/styles/     — every .css.ts in the app; see "Styles live apart from components"
 src/routes/     — AppRoutes.tsx, ProtectedRoutes.tsx
 src/hooks/      — <module>/use<Thing>.ts — one hook file per topic
 src/services/   — <module>/<Module>.service.ts — all writes for that module
@@ -70,6 +71,69 @@ owns them.
 
 Every import uses the `@/` alias (`@/hooks/plans/usePlans`), never a relative
 path — a file's location is then independent of who imports it.
+
+## Styles live apart from components
+
+`.css.ts` is a **type**, so it obeys the same first-level rule as every other
+type: there is exactly one `.css.ts` in `src/`, and it is under `src/styles/`.
+A component folder holds `.tsx` and nothing else.
+
+```
+src/styles/global/            — Theme, Global, Form, Badge, Motion, A11y + Token.utils
+src/styles/app/               — MainLayout, for src/app/layouts/<Name>.tsx
+src/styles/common/<category>/ — for src/common/components/<category>/<Name>.tsx
+src/styles/pages/<module>/    — modules the router can reach: their page(s) and components
+src/styles/features/<module>/ — modules with no route of their own
+```
+
+**`pages/` means routed, not tab-bar.** A module belongs there if `AppRoutes.tsx`
+maps a URL to one of its screens. `sync` is in `pages/` for exactly that reason —
+it is routed at `/sync` (reached from `SyncChip`, not the tab bar), and making
+`pages/` mean "tab destination" would be a rule the router itself does not follow.
+
+`features/` is for the two modules with no route:
+
+- `features/auth/` — `LoginPage` never routes. `App.tsx` renders it directly
+  when `!authenticated`, before `AppRoutes` exists.
+- `features/payments/` — no screen at all, only `RecordPaymentSheet`, opened
+  from the clients and dashboard pages.
+
+Both roots are subdivided identically, so a module can move between them by
+changing one path segment. `<module>/` is the whole module's styling surface in
+one folder: its page stylesheet at the root, each component category in its own
+folder.
+
+```
+src/pages/clients/                 src/styles/pages/clients/
+  ClientsPage.tsx                    ClientsPage.css.ts
+  detail/ClientDetailPage.tsx        detail/ClientDetailPage.css.ts
+  form/ClientFormPage.tsx            form/ClientFormPage.css.ts
+                                     buttons/ cards/ lists/ sheet/
+src/components/clients/              ↑ mirrors these
+  buttons/ cards/ lists/ sheet/
+```
+
+**`src/pages/` is nested by module too**, in the same shape — so finding a
+stylesheet is one rule with no exceptions and no lookup table:
+
+> Drop the leading type segment, prepend `styles/<root>/`, keep everything else
+> byte-for-byte. `<root>` is `pages` for a routed module, `features` for an
+> unrouted one.
+
+```
+pages/clients/detail/ClientDetailPage.tsx  ↔ styles/pages/clients/detail/ClientDetailPage.css.ts
+components/clients/cards/PauseCard.tsx     ↔ styles/pages/clients/cards/PauseCard.css.ts
+components/payments/sheet/RecordPayment…   ↔ styles/features/payments/sheet/RecordPayment….css.ts
+pages/auth/LoginPage.tsx                   ↔ styles/features/auth/LoginPage.css.ts
+```
+
+Filenames never change — same `PascalCase`, same `.css.ts`. `auth` is the only
+module whose two roots differ (`pages/auth/` ↔ `styles/features/auth/`), because
+`src/pages/` groups by module while `src/styles/` also encodes routed-vs-unrouted.
+Give `LoginPage` a route and the fix is one segment: `features/auth/` → `pages/auth/`.
+
+`Token.utils.ts` sits in `global/` beside the contract it reads even though it
+is not a stylesheet; it is style infrastructure and has no other consumer.
 
 ## Data flow — the part that is easy to get wrong
 
@@ -185,8 +249,8 @@ next time.
 
 Verified consistent across the codebase; follow these for new code.
 
-- Full-page routes: `pages/<Name>Page.tsx`, flat, with its stylesheet beside it
-  as `pages/<Name>Page.css.ts`. Modal flows:
+- Full-page routes: `pages/<module>/<Name>Page.tsx`, with its stylesheet at
+  the same path under `styles/<root>/`. Modal flows:
   `components/<module>/sheet/<Name>Sheet.tsx`.
 - **Every screen and sheet is a ViewModel hook plus a presentation component.**
   The hook (`hooks/<module>/use<Thing>.ts`) owns state, derived values, effects
@@ -210,12 +274,12 @@ Verified consistent across the codebase; follow these for new code.
   mounted component so two open sheets cannot fight over one slice; DOM nodes
   and in-flight pointers are `useRef`, not state at all.
 - Styling is Vanilla Extract. Colours come from the contract in
-  `common/styles/Theme.css.ts`, stored as bare `R G B` triples and read through
-  `solid()` / `alpha()` in `common/styles/Token.utils.ts` — never interpolate a
+  `styles/global/Theme.css.ts`, stored as bare `R G B` triples and read through
+  `solid()` / `alpha()` in `styles/global/Token.utils.ts` — never interpolate a
   triple straight into a property, and never write a hex value in a component.
   A `.css.ts` module may only export serialisable values, which is why those
   helpers live outside `Theme.css.ts`.
-- Shared form/button classes live in `common/styles/Form.css.ts`; reuse them
+- Shared form/button classes live in `styles/global/Form.css.ts`; reuse them
   rather than re-declaring a style. Repeated UI belongs in `common/components/`
   (`EmptyState`, `LoadingNotice`, `FilterChip`, `SearchInput`, `SelectField`,
   `SectionCard`).
@@ -243,7 +307,7 @@ Verified consistent across the codebase; follow these for new code.
   paused clients are excluded from expiry filters, dashboard counts, and
   `sweepExpiredClients`.
 - Never make the tab bar `position: fixed` again. It is the last row of the
-  `height: 100dvh` flex column in `app/layouts/MainLayout.css.ts`; as a fixed
+  `height: 100dvh` flex column in `styles/app/MainLayout.css.ts`; as a fixed
   element it drifted on an installed iOS PWA, where `env(safe-area-inset-bottom)`
   settles only after a re-layout. `Screen` uses `min-height: 100%` for the same
   reason — the shell owns the viewport height.

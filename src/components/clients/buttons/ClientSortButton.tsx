@@ -1,4 +1,4 @@
-import * as styles from '@/components/clients/buttons/ClientSortButton.css';
+import * as styles from '@/styles/pages/clients/buttons/ClientSortButton.css';
 import { CLIENT_SORT_LABELS, type ClientSort } from '@/constants/clients/ClientFilters.constants';
 
 interface Props {

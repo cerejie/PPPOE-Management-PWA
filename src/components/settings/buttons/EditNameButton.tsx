@@ -1,4 +1,4 @@
-import * as styles from '@/components/settings/buttons/EditNameButton.css';
+import * as styles from '@/styles/pages/settings/buttons/EditNameButton.css';
 
 interface Props {
   /** Read out in place of the icon, e.g. "Rename Ana Cruz". */

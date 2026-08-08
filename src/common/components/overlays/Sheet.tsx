@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, type PointerEvent, type ReactNode } fro
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '@/common/stores/createInstanceStore';
-import * as styles from '@/common/components/overlays/Sheet.css';
+import * as styles from '@/styles/common/overlays/Sheet.css';
 
 interface SheetProps {
   title: string;

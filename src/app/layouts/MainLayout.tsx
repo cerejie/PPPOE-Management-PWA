@@ -1,7 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { useBackgroundSync } from '@/hooks/sync/useSyncStatus';
 import { TabBar } from '@/common/components/layout/TabBar';
-import * as styles from '@/app/layouts/MainLayout.css';
+import * as styles from '@/styles/app/MainLayout.css';
 
 /**
  * App shell: a viewport-height column with the routed page scrolling inside it

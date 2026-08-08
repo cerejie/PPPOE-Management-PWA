@@ -1,8 +1,8 @@
 import { Sheet } from '@/common/components/overlays/Sheet';
 import { ConfirmDialog } from '@/common/components/overlays/ConfirmDialog';
 import { OfflineNotice } from '@/common/components/notices/OfflineNotice';
-import * as form from '@/common/styles/Form.css';
-import * as styles from '@/components/plans/sheet/PlanFormSheet.css';
+import * as form from '@/styles/global/Form.css';
+import * as styles from '@/styles/pages/plans/sheet/PlanFormSheet.css';
 import { usePlanForm } from '@/hooks/plans/usePlanForm';
 import type { Plan } from '@/types/plans/Plans.types';
 

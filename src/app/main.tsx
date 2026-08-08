@@ -7,8 +7,8 @@ import { App } from '@/app/App';
 
 // Side-effect stylesheets: the theme contract must be registered before any
 // component style that reads from it.
-import '@/common/styles/Theme.css';
-import '@/common/styles/Global.css';
+import '@/styles/global/Theme.css';
+import '@/styles/global/Global.css';
 
 registerSW({ immediate: true });
 

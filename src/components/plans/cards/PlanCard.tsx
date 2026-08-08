@@ -1,5 +1,5 @@
 import { SyncBadge } from '@/common/components/badges/SyncBadge';
-import * as styles from '@/components/plans/cards/PlanCard.css';
+import * as styles from '@/styles/pages/plans/cards/PlanCard.css';
 import { formatDate, formatMoney, pluralize } from '@/common/utils/Format.utils';
 import { isPlanOfferable } from '@/services/plans/Plans.service';
 import type { EntityWriteState } from '@/api/sync/syncEngine';

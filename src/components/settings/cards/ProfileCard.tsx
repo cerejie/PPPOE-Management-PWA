@@ -1,6 +1,6 @@
 import { EditNameButton } from '@/components/settings/buttons/EditNameButton';
 import { NameEditor } from '@/components/settings/forms/NameEditor';
-import * as styles from '@/components/settings/cards/ProfileCard.css';
+import * as styles from '@/styles/pages/settings/cards/ProfileCard.css';
 import type { AppUser } from '@/types/auth/Auth.types';
 
 interface Props {

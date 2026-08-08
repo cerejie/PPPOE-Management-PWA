@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { StatusDot } from '@/common/components/badges/StatusDot';
 import { ExpiryBadge } from '@/common/components/badges/ExpiryBadge';
 import { SyncBadge } from '@/common/components/badges/SyncBadge';
-import * as styles from '@/components/clients/lists/ClientListItem.css';
+import * as styles from '@/styles/pages/clients/lists/ClientListItem.css';
 import type { EntityWriteState } from '@/api/sync/syncEngine';
 import type { Client } from '@/types/clients/Clients.types';
 

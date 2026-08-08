@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import * as styles from '@/components/dashboard/cards/StatCard.css';
+import * as styles from '@/styles/pages/dashboard/cards/StatCard.css';
 
 /** Semantic colouring of the number, matching the tone used elsewhere for the same state. */
 export type StatTone = 'ok' | 'muted' | 'warn' | 'danger';

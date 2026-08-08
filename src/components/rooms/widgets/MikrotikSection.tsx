@@ -1,5 +1,5 @@
-import * as form from '@/common/styles/Form.css';
-import * as styles from '@/components/rooms/widgets/MikrotikSection.css';
+import * as form from '@/styles/global/Form.css';
+import * as styles from '@/styles/pages/rooms/widgets/MikrotikSection.css';
 import { useMikrotikSettings } from '@/hooks/rooms/useMikrotikSettings';
 import { formatDateTime } from '@/common/utils/Format.utils';
 import type { MikrotikStatus } from '@/types/rooms/Rooms.types';

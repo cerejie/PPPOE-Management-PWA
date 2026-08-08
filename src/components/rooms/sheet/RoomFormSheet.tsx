@@ -1,7 +1,7 @@
 import { Sheet } from '@/common/components/overlays/Sheet';
 import { ConfirmDialog } from '@/common/components/overlays/ConfirmDialog';
 import { OfflineNotice } from '@/common/components/notices/OfflineNotice';
-import * as form from '@/common/styles/Form.css';
+import * as form from '@/styles/global/Form.css';
 import { useRoomForm } from '@/hooks/rooms/useRoomForm';
 import type { Room } from '@/types/rooms/Rooms.types';
 

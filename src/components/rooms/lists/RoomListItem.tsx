@@ -1,5 +1,5 @@
 import { SyncBadge } from '@/common/components/badges/SyncBadge';
-import * as styles from '@/components/rooms/lists/RoomListItem.css';
+import * as styles from '@/styles/pages/rooms/lists/RoomListItem.css';
 import type { EntityWriteState } from '@/api/sync/syncEngine';
 import type { RoomRow } from '@/hooks/rooms/useRoomRows';
 

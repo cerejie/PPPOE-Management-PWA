@@ -1,5 +1,5 @@
 import type { ConnectionStatus } from '@/types/clients/Clients.types';
-import { dot } from '@/common/components/badges/StatusDot.css';
+import { dot } from '@/styles/common/badges/StatusDot.css';
 
 export function StatusDot({ status }: { status: ConnectionStatus }) {
   const connected = status === 'connected';

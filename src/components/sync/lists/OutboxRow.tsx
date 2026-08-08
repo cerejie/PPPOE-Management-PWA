@@ -1,4 +1,4 @@
-import * as styles from '@/components/sync/lists/OutboxRow.css';
+import * as styles from '@/styles/pages/sync/lists/OutboxRow.css';
 import { useOutboxSubject } from '@/hooks/sync/useOutboxSubject';
 import { describeOutboxItem } from '@/utils/sync/Outbox.utils';
 import { formatDateTime } from '@/common/utils/Format.utils';

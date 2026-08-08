@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import * as styles from '@/components/dashboard/widgets/RevenueHero.css';
+import * as styles from '@/styles/pages/dashboard/widgets/RevenueHero.css';
 import { formatMoney, pluralize } from '@/common/utils/Format.utils';
 
 interface Props {

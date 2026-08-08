@@ -1,7 +1,7 @@
 import { SectionCard } from '@/common/components/layout/SectionCard';
 import { StaffRow } from '@/components/settings/lists/StaffRow';
-import * as form from '@/common/styles/Form.css';
-import * as styles from '@/components/settings/sections/StaffSection.css';
+import * as form from '@/styles/global/Form.css';
+import * as styles from '@/styles/pages/settings/sections/StaffSection.css';
 import { useStaffSection } from '@/hooks/auth/useStaffSection';
 
 /** Settings → Staff accounts: who can sign in, and adding someone new. */

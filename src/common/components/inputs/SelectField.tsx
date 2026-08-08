@@ -1,4 +1,4 @@
-import * as form from '@/common/styles/Form.css';
+import * as form from '@/styles/global/Form.css';
 
 export interface SelectFieldOption {
   readonly value: string;

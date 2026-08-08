@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import * as styles from '@/common/components/overlays/ConfirmDialog.css';
+import * as styles from '@/styles/common/overlays/ConfirmDialog.css';
 
 interface ConfirmDialogProps {
   title: string;
