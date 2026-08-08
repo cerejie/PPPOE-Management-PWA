@@ -3,7 +3,15 @@ import { vars } from '@/common/styles/Theme.css';
 import { solid } from '@/common/styles/Token.utils';
 import { bar as chipBar } from '@/common/components/buttons/FilterChip.css';
 
-export const search = style({ marginBottom: '0.75rem' });
+/** Search box plus the sort toggle, which keeps its width as the box flexes. */
+export const searchRow = style({
+  display: 'flex',
+  alignItems: 'stretch',
+  gap: '0.5rem',
+  marginBottom: '0.75rem',
+});
+
+export const searchField = style({ flex: 1, minWidth: 0 });
 
 /** Bled out over the screen padding so the chips scroll edge to edge. */
 export const filterBar = style([

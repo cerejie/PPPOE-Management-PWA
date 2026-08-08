@@ -25,6 +25,7 @@ export const ALL_CLIENTS: ClientFilters = {
   roomId: 'all',
   expiry: 'all',
   paused: 'all',
+  sort: 'name',
 };
 
 /** Billing period assumed for a client with no plan attached. */

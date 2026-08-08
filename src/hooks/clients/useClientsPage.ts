@@ -6,7 +6,11 @@ import { useAuth } from '@/stores/auth/Auth.store';
 import { useClients, type ClientFilters, type ExpiryFilter } from '@/hooks/clients/useClients';
 import { useRooms } from '@/hooks/rooms/useRooms';
 import { useEntitySync } from '@/hooks/sync/useEntitySync';
-import type { ClientFilterChip } from '@/constants/clients/ClientFilters.constants';
+import {
+  DEFAULT_CLIENT_SORT,
+  type ClientFilterChip,
+  type ClientSort,
+} from '@/constants/clients/ClientFilters.constants';
 import type { EntityWriteState } from '@/api/sync/syncEngine';
 import type { Client, ConnectionStatus } from '@/types/clients/Clients.types';
 
@@ -21,8 +25,11 @@ export interface ClientsPageViewModel {
   /** The room the list is scoped to, when the user navigated in from one. */
   readonly roomName: string | undefined;
   readonly canAddClient: boolean;
+  /** Order of the list, by the date each client was added. */
+  readonly sort: ClientSort;
   setSearch: (value: string) => void;
   clearRoom: () => void;
+  toggleSort: () => void;
   isChipActive: (chip: ClientFilterChip) => boolean;
   toggleChip: (chip: ClientFilterChip) => void;
   roomNameOf: (roomId: string | null) => string | undefined;
@@ -41,6 +48,10 @@ function toExpiry(value: string | null): ExpiryFilter {
   return value === 'expiring' || value === 'expired' ? value : 'all';
 }
 
+function toSort(value: string | null): ClientSort {
+  return value === 'oldest' || value === 'newest' ? value : DEFAULT_CLIENT_SORT;
+}
+
 /**
  * The URL owns the filters — a filtered list stays shareable and survives a back
  * navigation. Only the search box, which nothing links to, is component state.
@@ -55,6 +66,7 @@ export function useClientsPage(): ClientsPageViewModel {
   const search = useStore(store, (s) => s.search);
 
   const roomId = params.get('room') ?? 'all';
+  const sort = toSort(params.get('sort'));
 
   const filters: ClientFilters = useMemo(
     () => ({
@@ -63,8 +75,9 @@ export function useClientsPage(): ClientsPageViewModel {
       roomId,
       expiry: toExpiry(params.get('expiry')),
       paused: params.get('paused') === '1' ? 'only' : 'all',
+      sort,
     }),
-    [search, params, roomId],
+    [search, params, roomId, sort],
   );
 
   const clients = useClients(filters);
@@ -87,12 +100,14 @@ export function useClientsPage(): ClientsPageViewModel {
   }
 
   function toggleChip(chip: ClientFilterChip): void {
-    // "All" clears every filter but keeps the room scope the user navigated in with.
+    // "All" clears every filter but keeps the room scope the user navigated in
+    // with, and the sort, which is an ordering preference rather than a filter.
     if (chip.param === null) {
+      const kept = new URLSearchParams();
       const room = params.get('room');
-      setParams(room === null ? new URLSearchParams() : new URLSearchParams({ room }), {
-        replace: true,
-      });
+      if (room !== null) kept.set('room', room);
+      if (sort !== DEFAULT_CLIENT_SORT) kept.set('sort', sort);
+      setParams(kept, { replace: true });
       return;
     }
     // Setting a key that is already taken by its sibling swaps the two for free
@@ -106,8 +121,11 @@ export function useClientsPage(): ClientsPageViewModel {
     search,
     roomName: roomNameOf(params.get('room')),
     canAddClient: isSuperAdmin,
+    sort,
     setSearch: (value) => store.setState({ search: value }),
     clearRoom: () => setParam('room', null),
+    // The default order carries no parameter, so a shared link stays clean.
+    toggleSort: () => setParam('sort', sort === 'newest' ? 'oldest' : null),
     isChipActive,
     toggleChip,
     roomNameOf,

@@ -5,6 +5,7 @@ import { FilterChip } from '@/common/components/buttons/FilterChip';
 import { SearchInput } from '@/common/components/inputs/SearchInput';
 import { EmptyState } from '@/common/components/notices/EmptyState';
 import { LoadingNotice } from '@/common/components/notices/LoadingNotice';
+import { ClientSortButton } from '@/components/clients/buttons/ClientSortButton';
 import { ClientListItem } from '@/components/clients/lists/ClientListItem';
 import * as styles from '@/pages/ClientsPage.css';
 import { CLIENT_FILTER_CHIPS } from '@/constants/clients/ClientFilters.constants';
@@ -19,13 +20,16 @@ export function ClientsPage() {
   return (
     <>
       <Screen title="Clients" eyebrow={clients ? `${clients.length} shown` : undefined}>
-        <div className={styles.search}>
-          <SearchInput
-            value={vm.search}
-            onChange={vm.setSearch}
-            placeholder="Search name or PPPoE username"
-            ariaLabel="Search clients"
-          />
+        <div className={styles.searchRow}>
+          <div className={styles.searchField}>
+            <SearchInput
+              value={vm.search}
+              onChange={vm.setSearch}
+              placeholder="Search name or PPPoE username"
+              ariaLabel="Search clients"
+            />
+          </div>
+          <ClientSortButton sort={vm.sort} onToggle={vm.toggleSort} />
         </div>
 
         <div className={styles.filterBar}>

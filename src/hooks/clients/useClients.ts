@@ -1,10 +1,17 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/api/common/db';
 import { daysUntil } from '@/common/utils/Format.utils';
+import type { ClientSort } from '@/constants/clients/ClientFilters.constants';
 import type { Client, ConnectionStatus } from '@/types/clients/Clients.types';
 import { isClientEvent, type OutboxItem } from '@/types/sync/Sync.types';
 
 export type ExpiryFilter = 'all' | 'expiring' | 'expired';
+
+/**
+ * The list screen offers the two date orders; `name` stays available for pickers,
+ * where alphabetical is the only order that helps someone hunting for a person.
+ */
+export type ClientOrder = ClientSort | 'name';
 
 export interface ClientFilters {
   search: string;
@@ -13,6 +20,7 @@ export interface ClientFilters {
   expiry: ExpiryFilter;
   /** 'only' narrows to clients currently on a vacation pause. */
   paused: 'all' | 'only';
+  sort: ClientOrder;
 }
 
 export function useClients(filters: ClientFilters): Client[] | undefined {
@@ -49,8 +57,23 @@ export function useClients(filters: ClientFilters): Client[] | undefined {
       );
     }
 
-    return list.sort((a, b) => a.full_name.localeCompare(b.full_name));
-  }, [filters.search, filters.status, filters.roomId, filters.expiry, filters.paused]);
+    // On a date order the name only breaks ties, so clients added in the same
+    // batch — an import, or a burst of offline adds — stay in a stable order.
+    return list.sort((a, b) => {
+      if (filters.sort !== 'name') {
+        const byDate = a.created_at.localeCompare(b.created_at);
+        if (byDate !== 0) return filters.sort === 'oldest' ? byDate : -byDate;
+      }
+      return a.full_name.localeCompare(b.full_name);
+    });
+  }, [
+    filters.search,
+    filters.status,
+    filters.roomId,
+    filters.expiry,
+    filters.paused,
+    filters.sort,
+  ]);
 }
 
 export function useClient(id: string | undefined): Client | undefined {
