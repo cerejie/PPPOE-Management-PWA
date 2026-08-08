@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { StatusDot } from '@/common/components/badges/StatusDot';
 import { ExpiryBadge } from '@/common/components/badges/ExpiryBadge';
 import { SyncBadge } from '@/common/components/badges/SyncBadge';
+import { NO_ACCOUNT_LABEL } from '@/constants/clients/ClientForm.constants';
 import * as styles from '@/styles/pages/clients/lists/ClientListItem.css';
 import type { EntityWriteState } from '@/api/sync/syncEngine';
 import type { Client } from '@/types/clients/Clients.types';
@@ -24,7 +25,7 @@ export function ClientListItem({ client, roomName, syncState, to }: Props) {
           <div className={styles.text}>
             <p className={styles.name}>{client.full_name}</p>
             <p className={styles.meta}>
-              {client.pppoe_username}
+              {client.pppoe_username ?? NO_ACCOUNT_LABEL}
               {roomName ? ` · ${roomName}` : ''}
             </p>
           </div>

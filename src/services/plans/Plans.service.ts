@@ -12,6 +12,11 @@ export interface PlanInput {
   /** Days a payment on this plan extends the client's expires_at. */
   duration_days: number;
   mbps: number;
+  /**
+   * RouterOS `/ppp/profile` name. This is what actually limits bandwidth on the
+   * router; `mbps` is only what the plan advertises.
+   */
+  profile: string | null;
   /** ISO date the plan stops being offered to new clients. Null = always. */
   valid_until: string | null;
 }

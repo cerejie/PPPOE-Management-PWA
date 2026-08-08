@@ -1,8 +1,10 @@
 import { Sheet } from '@/common/components/overlays/Sheet';
 import { ConfirmDialog } from '@/common/components/overlays/ConfirmDialog';
-import { OfflineNotice } from '@/common/components/notices/OfflineNotice';
+import { PlanRateFields } from '@/components/plans/sheet/PlanRateFields';
+import { PlanProfileField } from '@/components/plans/sheet/PlanProfileField';
+import { PlanTermFields } from '@/components/plans/sheet/PlanTermFields';
+import { PlanFormActions } from '@/components/plans/sheet/PlanFormActions';
 import * as form from '@/styles/global/Form.css';
-import * as styles from '@/styles/pages/plans/sheet/PlanFormSheet.css';
 import { usePlanForm } from '@/hooks/plans/usePlanForm';
 import type { Plan } from '@/types/plans/Plans.types';
 
@@ -35,103 +37,10 @@ export function PlanFormSheet({ plan, onClose }: Props) {
             />
           </div>
 
-          <div className={styles.pairGrid}>
-            <div>
-              <label htmlFor="plan-price" className={form.label}>
-                Price (₱)
-              </label>
-              <input
-                id="plan-price"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                required
-                value={vm.price}
-                onChange={(e) => vm.setPrice(e.target.value)}
-                placeholder="0.00"
-                className={form.field}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="plan-mbps" className={form.label}>
-                Speed (Mbps)
-              </label>
-              <input
-                id="plan-mbps"
-                type="number"
-                inputMode="numeric"
-                step="1"
-                min="0"
-                required
-                value={vm.mbps}
-                onChange={(e) => vm.setMbps(e.target.value)}
-                placeholder="50"
-                className={form.field}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="plan-days" className={form.label}>
-              Validity (days)
-            </label>
-            <input
-              id="plan-days"
-              type="number"
-              inputMode="numeric"
-              step="1"
-              min="1"
-              required
-              value={vm.durationDays}
-              onChange={(e) => vm.setDurationDays(e.target.value)}
-              className={form.field}
-            />
-            <p className={form.hint}>
-              How far each payment pushes the client&apos;s expiry date.
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="plan-valid-until" className={form.label}>
-              Offered until <span className={form.optional}>(optional)</span>
-            </label>
-            <input
-              id="plan-valid-until"
-              type="date"
-              value={vm.validUntil}
-              onChange={(e) => vm.setValidUntil(e.target.value)}
-              className={form.field}
-            />
-            <p className={form.hint}>
-              After this date the plan stops appearing for new clients. Clients already on it
-              keep it.
-            </p>
-          </div>
-
-          <OfflineNotice message="this plan is saved on the device and synced automatically later." />
-
-          {vm.error && (
-            <p role="alert" className={form.errorAlert}>
-              {vm.error}
-            </p>
-          )}
-
-          <button type="submit" disabled={vm.busy} className={form.button.primary}>
-            {vm.submitLabel}
-          </button>
-
-          {vm.isEdit && (
-            <button
-              type="button"
-              disabled={vm.busy}
-              onClick={vm.requestDelete}
-              className={form.button.danger}
-            >
-              Delete plan
-            </button>
-          )}
+          <PlanRateFields vm={vm} />
+          <PlanProfileField vm={vm} />
+          <PlanTermFields vm={vm} />
+          <PlanFormActions vm={vm} />
         </form>
       </Sheet>
 

@@ -3,6 +3,7 @@ import type { AppUser } from '@/types/auth/Auth.types';
 import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/Clients.types';
 import type { Payment } from '@/types/payments/Payments.types';
 import type { Plan } from '@/types/plans/Plans.types';
+import type { PppoeAccount, PppoeProfile } from '@/types/pppoe/Pppoe.types';
 import type { Room, Router } from '@/types/rooms/Rooms.types';
 import type { OutboxItem, SyncMeta } from '@/types/sync/Sync.types';
 
@@ -15,6 +16,8 @@ class PppoeDb extends Dexie {
   rooms!: Table<Room, string>;
   routers!: Table<Router, string>;
   plans!: Table<Plan, string>;
+  pppoe_accounts!: Table<PppoeAccount, string>;
+  pppoe_profiles!: Table<PppoeProfile, string>;
   payments!: Table<Payment, string>;
   connection_events!: Table<ConnectionEvent, string>;
   pause_events!: Table<PauseEvent, string>;
@@ -41,6 +44,16 @@ class PppoeDb extends Dexie {
     this.version(2).stores({
       pause_events: 'id, client_id, performed_at, client_uuid',
     });
+
+    // v3: PPPoE accounts and profiles mirrored from the router. `clients` is
+    // re-declared only to add the pppoe_account_id index — Dexie needs the
+    // whole store string when a table's indexes change, and existing rows are
+    // kept; the next pull backfills the new column.
+    this.version(3).stores({
+      clients: 'id, pppoe_username, pppoe_account_id, room_id, connection_status, expires_at',
+      pppoe_accounts: 'id, name, synced_to_router',
+      pppoe_profiles: 'id, name',
+    });
   }
 }
 
@@ -65,13 +78,15 @@ export async function deleteMeta(key: string): Promise<void> {
 export async function clearLocalCache(): Promise<void> {
   await db.transaction(
     'rw',
-    [db.clients, db.rooms, db.routers, db.plans, db.payments, db.connection_events, db.pause_events, db.app_users, db.outbox, db.sync_meta],
+    [db.clients, db.rooms, db.routers, db.plans, db.pppoe_accounts, db.pppoe_profiles, db.payments, db.connection_events, db.pause_events, db.app_users, db.outbox, db.sync_meta],
     async () => {
       await Promise.all([
         db.clients.clear(),
         db.rooms.clear(),
         db.routers.clear(),
         db.plans.clear(),
+        db.pppoe_accounts.clear(),
+        db.pppoe_profiles.clear(),
         db.payments.clear(),
         db.connection_events.clear(),
         db.pause_events.clear(),

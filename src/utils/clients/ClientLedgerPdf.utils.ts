@@ -61,7 +61,7 @@ export function buildLedgerPdf(input: LedgerPdfInput): jsPDF {
   const paused = client.paused_at !== null;
   const details: string[][] = [
     ['Client', client.full_name],
-    ['PPPoE username', client.pppoe_username],
+    ['PPPoE account', client.pppoe_username ?? '—'],
     ['Room', room?.name ?? '—'],
     ['Plan', plan ? `${plan.name} (${pdfMoney(plan.price)} / ${plan.duration_days} days)` : '—'],
     ['Monthly fee', pdfMoney(client.monthly_fee)],
@@ -145,7 +145,8 @@ export function buildLedgerPdf(input: LedgerPdfInput): jsPDF {
 export function ledgerFileName(client: Client): string {
   const safe = client.full_name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '');
   const day = new Date().toISOString().slice(0, 10);
-  return `statement-${safe || client.pppoe_username}-${day}.pdf`;
+  // A client with no line falls back to their id, so the name is never empty.
+  return `statement-${safe || client.pppoe_username || client.id}-${day}.pdf`;
 }
 
 /**

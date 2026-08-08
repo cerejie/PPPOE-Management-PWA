@@ -25,7 +25,11 @@
 //        stores them if the session succeeds.
 //   { action: 'status' }   SuperAdmin. Stored connection, never the password.
 //   { action: 'probe' }    SuperAdmin or cron. Re-test the stored credentials.
-//   { action: 'sync', client_id? }  Any active user, or cron. Push state.
+//   { action: 'sync', client_id? }  Any active user, or cron. Push state. A
+//        sweep with no client_id also reconciles pppoe_accounts — see §7.
+//   { action: 'import' }   SuperAdmin or cron. Mirror the router's secret and
+//        profile lists into the database. Router -> app, the one direction the
+//        rest of this function never goes.
 //
 // Credentials come from public.router_settings (written by Settings ->
 // MikroTik). The MIKROTIK_* env vars remain as a fallback so a deployment
@@ -37,6 +41,7 @@
 
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { applyLineState, readIdentity, RouterOsClient } from './routeros.ts';
+import { importRouterState, profilesByPlan, reconcileAccounts } from './accounts.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -53,7 +58,7 @@ function json(body: unknown, status: number): Response {
 }
 
 interface Body {
-  action?: 'sync' | 'probe' | 'configure' | 'status';
+  action?: 'sync' | 'probe' | 'configure' | 'status' | 'import';
   client_id?: string;
   host?: string;
   port?: number;
@@ -65,7 +70,8 @@ interface Body {
 
 interface ClientRow {
   id: string;
-  pppoe_username: string;
+  pppoe_username: string | null;
+  plan_id: string | null;
   connection_status: 'connected' | 'disconnected';
   deleted_at: string | null;
 }
@@ -241,6 +247,23 @@ async function markExecuted(admin: SupabaseClient, eventIds: string[]): Promise<
   if (error) {
     await admin.from('connection_events').update({ executed_on_router: true }).in('id', eventIds);
   }
+}
+
+/**
+ * How many accounts the router still owes work for: created or edited while it
+ * was out of reach (`synced_to_router = false`), or deleted in the app with the
+ * secret still on the box (`deleted_at` set). Counted head-only so a sweep with
+ * nothing to do never opens a TCP session.
+ */
+async function countAccountWork(admin: SupabaseClient): Promise<number> {
+  const { count, error } = await admin
+    .from('pppoe_accounts')
+    .select('id', { count: 'exact', head: true })
+    .or('synced_to_router.eq.false,deleted_at.not.is.null');
+
+  // Tolerates the table not existing, like loadSettings: a deployment without
+  // migration 0009 keeps pushing connection state.
+  return error ? 0 : (count ?? 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -446,6 +469,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
   }
 
+  // --- 5b. import -----------------------------------------------------------
+  if (action === 'import') {
+    if (!isCron && !isSuperAdmin) return json({ error: 'forbidden' }, 403);
+
+    const client = new RouterOsClient(cfg);
+    try {
+      await client.connect();
+      const result = await importRouterState(admin, client);
+      if (settings) {
+        await recordHealth(admin, { last_ok_at: new Date().toISOString(), last_error: null });
+      }
+      return json({ ok: true, ...result }, 200);
+    } catch (err) {
+      const detail = explainConnectError((err as Error).message, Boolean(cfg.caCert));
+      if (settings) await recordHealth(admin, { last_error: detail });
+      return json({ ok: false, error: 'router_unreachable', detail }, 502);
+    } finally {
+      client.close();
+    }
+  }
+
   // --- 6. Collect the work --------------------------------------------------
   let query = admin
     .from('connection_events')
@@ -458,22 +502,48 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const { data: pending, error: pendingErr } = await query;
   if (pendingErr) return json({ error: 'query_failed', detail: pendingErr.message }, 500);
-  if (!pending || pending.length === 0) return json({ ok: true, applied: 0, results: [] }, 200);
+  const events = (pending ?? []) as { id: string; client_id: string }[];
+
+  // Secrets the app owes the router. Only on a full sweep: a targeted push is
+  // about one client's line, and reconciliation is a whole-list operation that
+  // would make every such call pay for it.
+  const reconciling = !body.client_id && (await countAccountWork(admin)) > 0;
+
+  if (events.length === 0 && !reconciling) {
+    return json({ ok: true, applied: 0, results: [] }, 200);
+  }
 
   const eventsByClient = new Map<string, string[]>();
-  for (const row of pending as { id: string; client_id: string }[]) {
+  for (const row of events) {
     const list = eventsByClient.get(row.client_id) ?? [];
     list.push(row.id);
     eventsByClient.set(row.client_id, list);
   }
 
-  const { data: clients, error: clientsErr } = await admin
-    .from('clients')
-    .select('id, pppoe_username, connection_status, deleted_at')
-    .in('id', [...eventsByClient.keys()]);
+  const clientById = new Map<string, ClientRow>();
+  const profileByPlan = new Map<string, string>();
 
-  if (clientsErr) return json({ error: 'query_failed', detail: clientsErr.message }, 500);
-  const clientById = new Map((clients as ClientRow[]).map((c) => [c.id, c]));
+  if (eventsByClient.size > 0) {
+    const { data: clients, error: clientsErr } = await admin
+      .from('clients')
+      .select('id, pppoe_username, plan_id, connection_status, deleted_at')
+      .in('id', [...eventsByClient.keys()]);
+
+    if (clientsErr) return json({ error: 'query_failed', detail: clientsErr.message }, 500);
+
+    for (const client of (clients ?? []) as ClientRow[]) clientById.set(client.id, client);
+
+    // The plan's RouterOS profile is asserted alongside the line state, so a
+    // client moved to another plan actually changes speed.
+    const planIds = [
+      ...new Set(
+        [...clientById.values()].map((c) => c.plan_id).filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    for (const [planId, profile] of await profilesByPlan(admin, planIds)) {
+      profileByPlan.set(planId, profile);
+    }
+  }
 
   // --- 7. Apply, one TCP session for the whole batch ------------------------
   const router = new RouterOsClient(cfg);
@@ -481,16 +551,38 @@ Deno.serve(async (req: Request): Promise<Response> => {
     await router.connect();
   } catch (err) {
     const detail = explainConnectError((err as Error).message, Boolean(cfg.caCert));
-    await noteError(admin, pending.map((p) => p.id), detail);
+    if (events.length > 0) await noteError(admin, events.map((e) => e.id), detail);
     if (settings) await recordHealth(admin, { last_error: detail });
-    // Events stay executed_on_router = false, so the next sweep retries them.
+    // Events stay executed_on_router = false and accounts stay unsynced, so the
+    // next sweep retries both.
     return json({ ok: false, error: 'router_unreachable', detail, applied: 0 }, 502);
   }
 
   const results: Array<Record<string, unknown>> = [];
   let applied = 0;
+  let accounts: Awaited<ReturnType<typeof reconcileAccounts>> | undefined;
 
   try {
+    // Before the events: an account created offline and a connection event for
+    // the client on it arrive in the same flush, and applyLineState can only
+    // find a secret that already exists.
+    //
+    // Contained: reconciliation failing wholesale must not strand the
+    // connection events, which are the older and more urgent job.
+    if (reconciling) {
+      try {
+        accounts = await reconcileAccounts(admin, router);
+      } catch (err) {
+        accounts = {
+          created: 0,
+          updated: 0,
+          removed: 0,
+          missing: 0,
+          errors: [{ name: '(reconcile)', error: (err as Error).message }],
+        };
+      }
+    }
+
     for (const [clientId, eventIds] of eventsByClient) {
       const client = clientById.get(clientId);
 
@@ -515,6 +607,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
           router,
           client.pppoe_username,
           client.connection_status === 'connected',
+          client.plan_id ? (profileByPlan.get(client.plan_id) ?? null) : null,
         );
 
         if (!outcome.secretFound) {
@@ -553,5 +646,5 @@ Deno.serve(async (req: Request): Promise<Response> => {
     await recordHealth(admin, { last_ok_at: new Date().toISOString(), last_error: null });
   }
 
-  return json({ ok: true, applied, results }, 200);
+  return json({ ok: true, applied, results, ...(accounts ? { accounts } : {}) }, 200);
 });

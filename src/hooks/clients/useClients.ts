@@ -53,7 +53,7 @@ export function useClients(filters: ClientFilters): Client[] | undefined {
       list = list.filter(
         (c) =>
           c.full_name.toLowerCase().includes(q) ||
-          c.pppoe_username.toLowerCase().includes(q),
+          (c.pppoe_username ?? '').toLowerCase().includes(q),
       );
     }
 

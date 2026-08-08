@@ -1,9 +1,12 @@
-import { type FormEvent } from 'react';
+import { useMemo, type FormEvent } from 'react';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '@/common/stores/createInstanceStore';
+import { usePppoeProfiles } from '@/hooks/pppoe/usePppoeProfiles';
 import { createPlan, softDeletePlan, updatePlan, type PlanInput } from '@/services/plans/Plans.service';
 import { fromDateInputValue, toDateInputValue } from '@/common/utils/Format.utils';
+import { NO_PROFILE_LABEL } from '@/constants/pppoe/PppoeAccounts.constants';
+import type { SearchSelectOption } from '@/common/components/inputs/SearchSelect';
 import type { Plan } from '@/types/plans/Plans.types';
 
 /** Numbers are held as strings so the inputs can be cleared while typing. */
@@ -12,6 +15,7 @@ interface PlanFormState {
   price: string;
   durationDays: string;
   mbps: string;
+  profile: string;
   validUntil: string;
   error: string | null;
   busy: boolean;
@@ -23,7 +27,12 @@ export interface PlanForm {
   readonly price: string;
   readonly durationDays: string;
   readonly mbps: string;
+  readonly profile: string;
   readonly validUntil: string;
+  /** The router's profiles, plus whatever this plan already names. */
+  readonly profileOptions: readonly SearchSelectOption[];
+  /** Why the profile list is empty, or what the chosen one does. Null if neither. */
+  readonly profileHint: string | null;
   readonly error: string | null;
   readonly busy: boolean;
   readonly confirmingDelete: boolean;
@@ -36,6 +45,7 @@ export interface PlanForm {
   setPrice: (value: string) => void;
   setDurationDays: (value: string) => void;
   setMbps: (value: string) => void;
+  setProfile: (value: string) => void;
   setValidUntil: (value: string) => void;
   submit: (event: FormEvent) => void;
   requestDelete: () => void;
@@ -65,6 +75,7 @@ function parsePlan(state: PlanFormState): ParsedPlan {
       price,
       duration_days: durationDays,
       mbps,
+      profile: state.profile || null,
       valid_until: fromDateInputValue(state.validUntil),
     },
   };
@@ -72,22 +83,45 @@ function parsePlan(state: PlanFormState): ParsedPlan {
 
 export function usePlanForm(plan: Plan | undefined, onDone: () => void): PlanForm {
   const isEdit = plan !== undefined;
+  const profiles = usePppoeProfiles();
 
   const store = useInstanceStore<PlanFormState>(() => ({
     name: plan?.name ?? '',
     price: plan ? String(plan.price) : '',
     durationDays: plan ? String(plan.duration_days) : '30',
     mbps: plan ? String(plan.mbps) : '',
+    profile: plan?.profile ?? '',
     validUntil: toDateInputValue(plan?.valid_until ?? null),
     error: null,
     busy: false,
     confirmingDelete: false,
   }));
 
-  const { name, price, durationDays, mbps, validUntil, error, busy, confirmingDelete } = useStore(
-    store,
-    useShallow((s) => s),
-  );
+  const { name, price, durationDays, mbps, profile, validUntil, error, busy, confirmingDelete } =
+    useStore(
+      store,
+      useShallow((s) => s),
+    );
+
+  /**
+   * A name the router no longer has is still offered, so opening a plan does
+   * not silently blank its profile. It renders as "missing from the router",
+   * which is the honest state — the plan is pointing at nothing.
+   */
+  const profileOptions = useMemo<readonly SearchSelectOption[]>(() => {
+    const known = profiles ?? [];
+    const stale = profile && !known.some((p) => p.name === profile);
+
+    return [
+      { value: '', label: NO_PROFILE_LABEL },
+      ...known.map((p) => ({
+        value: p.name,
+        label: p.name,
+        hint: p.rate_limit ?? 'no rate limit',
+      })),
+      ...(stale ? [{ value: profile, label: profile, hint: 'missing from the router' }] : []),
+    ];
+  }, [profiles, profile]);
 
   async function save(): Promise<void> {
     const parsed = parsePlan(store.getState());
@@ -118,11 +152,21 @@ export function usePlanForm(plan: Plan | undefined, onDone: () => void): PlanFor
     onDone();
   }
 
+  const chosenProfile = profiles?.find((p) => p.name === profile);
+
   return {
     name,
     price,
     durationDays,
     mbps,
+    profile,
+    profileOptions,
+    profileHint:
+      profiles !== undefined && profiles.length === 0
+        ? 'No profiles yet — import them from the router on the PPPoE tab.'
+        : chosenProfile?.rate_limit
+          ? `Clients on this plan get ${chosenProfile.rate_limit} on the router.`
+          : null,
     validUntil,
     error,
     busy,
@@ -138,6 +182,7 @@ export function usePlanForm(plan: Plan | undefined, onDone: () => void): PlanFor
     setPrice: (value) => store.setState({ price: value }),
     setDurationDays: (value) => store.setState({ durationDays: value }),
     setMbps: (value) => store.setState({ mbps: value }),
+    setProfile: (value) => store.setState({ profile: value }),
     setValidUntil: (value) => store.setState({ validUntil: value }),
     submit: (event) => {
       event.preventDefault();

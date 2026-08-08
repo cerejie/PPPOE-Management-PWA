@@ -11,6 +11,7 @@ import {
   DEFAULT_PAYMENT_METHOD,
 } from '@/constants/payments/RecordPayment.constants';
 import { useAuth } from '@/stores/auth/Auth.store';
+import { NO_ACCOUNT_LABEL } from '@/constants/clients/ClientForm.constants';
 import { useClients } from '@/hooks/clients/useClients';
 import { usePlans } from '@/hooks/plans/usePlans';
 import { nextExpiry } from '@/api/sync/syncEngine';
@@ -85,7 +86,7 @@ export function useRecordPaymentForm(client: Client | undefined, onDone: () => v
       (clients ?? []).map((c) => ({
         value: c.id,
         label: c.full_name,
-        hint: c.pppoe_username,
+        hint: c.pppoe_username ?? NO_ACCOUNT_LABEL,
       })),
     [clients],
   );

@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import { useInstanceStore } from '@/common/stores/createInstanceStore';
-import { useClient } from '@/hooks/clients/useClients';
+import { useClient, useClients } from '@/hooks/clients/useClients';
 import { usePlans } from '@/hooks/plans/usePlans';
+import { usePppoeAccounts } from '@/hooks/pppoe/usePppoeAccounts';
 import { useRooms } from '@/hooks/rooms/useRooms';
 import { useRouters } from '@/hooks/rooms/useRouters';
 import { isPlanOfferable } from '@/services/plans/Plans.service';
@@ -18,13 +19,25 @@ import {
 import { CLIENTS_PATH } from '@/constants/clients/ClientRoutes.constants';
 import {
   DEFAULT_PLAN_DURATION_DAYS,
+  NO_ACCOUNT_LABEL,
   NO_PLAN_LABEL,
   NO_ROOM_LABEL,
   isAccountStatus,
 } from '@/constants/clients/ClientForm.constants';
 import type { SelectFieldOption } from '@/common/components/inputs/SelectField';
+import type { SearchSelectOption } from '@/common/components/inputs/SearchSelect';
 import { formatDate, fromDateInputStart, todayInputValue } from '@/common/utils/Format.utils';
 import type { Plan } from '@/types/plans/Plans.types';
+
+/** Only used to work out which lines are already taken; order is irrelevant. */
+const ACCOUNT_PICKER_FILTERS = {
+  search: '',
+  status: 'all',
+  roomId: 'all',
+  expiry: 'all',
+  paused: 'all',
+  sort: 'name',
+} as const;
 
 interface ClientFormState {
   values: ClientInput;
@@ -44,6 +57,10 @@ export interface ClientFormViewModel {
   readonly roomOptions: readonly SelectFieldOption[];
   /** Retired plans stay listed for the client already on one. */
   readonly planOptions: readonly SelectFieldOption[];
+  /** Free lines plus whichever one this client already holds. */
+  readonly accountOptions: readonly SearchSelectOption[];
+  /** Why the account list is short or empty — null when there is nothing to say. */
+  readonly accountHint: string | null;
   /** Billing period of the selected plan, used for the first-expiry preview. */
   readonly durationDays: number;
   /** Expiry a new client would start on; null on edit, where payments own it. */
@@ -64,7 +81,7 @@ export interface ClientFormViewModel {
 
 const BLANK_CLIENT: ClientInput = {
   full_name: '',
-  pppoe_username: '',
+  pppoe_account_id: null,
   room_id: null,
   router_id: null,
   plan_id: null,
@@ -93,6 +110,8 @@ export function useClientForm(): ClientFormViewModel {
   const rooms = useRooms();
   const routers = useRouters();
   const plans = usePlans();
+  const accounts = usePppoeAccounts();
+  const clients = useClients(ACCOUNT_PICKER_FILTERS);
 
   const store = useInstanceStore<ClientFormState>(() => ({
     values: { ...BLANK_CLIENT, installed_at: fromDateInputStart(todayInputValue()) },
@@ -111,7 +130,7 @@ export function useClientForm(): ClientFormViewModel {
     store.setState({
       values: {
         full_name: existing.full_name,
-        pppoe_username: existing.pppoe_username,
+        pppoe_account_id: existing.pppoe_account_id,
         room_id: existing.room_id,
         router_id: existing.router_id,
         plan_id: existing.plan_id,
@@ -140,6 +159,36 @@ export function useClientForm(): ClientFormViewModel {
     ],
     [plans, values.plan_id],
   );
+
+  /**
+   * A line already on someone else is deliberately not offered. Moving a
+   * subscriber onto an occupied account is a real operation, but it belongs on
+   * the PPPoE screen where the person losing the line is visible — silently
+   * cutting them off from inside someone else's edit form is not something an
+   * operator can see themselves doing.
+   */
+  const accountOptions = useMemo<readonly SearchSelectOption[]>(() => {
+    const taken = new Set(
+      (clients ?? [])
+        .filter((c) => c.pppoe_account_id && c.id !== id)
+        .map((c) => c.pppoe_account_id),
+    );
+
+    return [
+      { value: '', label: NO_ACCOUNT_LABEL },
+      ...(accounts ?? [])
+        .filter((account) => !taken.has(account.id))
+        .map((account) => ({
+          value: account.id,
+          label: account.name,
+          hint: account.present_on_router
+            ? account.disabled
+              ? 'disabled on the router'
+              : account.service
+            : 'not on the router yet',
+        })),
+    ];
+  }, [accounts, clients, id]);
 
   const durationDays =
     plans?.find((plan) => plan.id === values.plan_id)?.duration_days ?? DEFAULT_PLAN_DURATION_DAYS;
@@ -205,6 +254,16 @@ export function useClientForm(): ClientFormViewModel {
     submitLabel: busy ? 'Saving…' : isEdit ? 'Save changes' : 'Add client',
     roomOptions,
     planOptions,
+    accountOptions,
+    // One option means the list holds nothing but "No PPPoE account".
+    accountHint:
+      accounts === undefined
+        ? null
+        : accounts.length === 0
+          ? 'No PPPoE accounts yet — add or import them on the PPPoE tab.'
+          : accountOptions.length === 1
+            ? 'Every account is already on a client. Free one up, or add a new account on the PPPoE tab.'
+            : null,
     durationDays,
     seededExpiry,
     seededExpiryLabel: seededExpiry

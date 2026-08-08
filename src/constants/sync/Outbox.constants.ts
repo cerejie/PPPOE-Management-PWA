@@ -6,6 +6,7 @@ export const ENTITY_LABEL: Record<EntityTable, string> = {
   rooms: 'room',
   routers: 'router',
   plans: 'plan',
+  pppoe_accounts: 'PPPoE account',
   payments: 'payment',
   connection_events: 'connection event',
   pause_events: 'pause event',

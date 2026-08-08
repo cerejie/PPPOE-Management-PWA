@@ -362,7 +362,149 @@ const isTrue = (v: string | undefined) => v === 'true' || v === 'yes';
 export interface ApplyResult {
   secretFound: boolean;
   secretChanged: boolean;
+  profileChanged: boolean;
   sessionsRemoved: number;
+}
+
+/** One `/ppp/secret`, as the app mirrors it. */
+export interface SecretRow {
+  /** RouterOS's internal id, "*1A". */
+  id: string;
+  name: string;
+  password: string;
+  service: string;
+  profile: string;
+  comment: string;
+  disabled: boolean;
+}
+
+/** One `/ppp/profile`. Read-only — the app never creates these. */
+export interface ProfileRow {
+  name: string;
+  rateLimit: string;
+  localAddress: string;
+  remoteAddress: string;
+}
+
+/** Fields the app is allowed to write onto a secret. */
+export interface SecretInput {
+  name: string;
+  password: string;
+  service: string;
+  profile?: string | null;
+  comment?: string | null;
+  disabled: boolean;
+}
+
+/**
+ * Every secret on the router, disabled ones included.
+ *
+ * The disabled ones are the point: a line cut off weeks ago still belongs to a
+ * subscriber, and an operator who cannot see it cannot bring it back.
+ */
+export async function listSecrets(client: RouterOsClient): Promise<SecretRow[]> {
+  const rows = await client.talk([
+    '/ppp/secret/print',
+    '=.proplist=.id,name,password,service,profile,comment,disabled',
+  ]);
+
+  return rows
+    .filter((r) => r.attrs.name && r.attrs['.id'])
+    .map((r) => ({
+      id: r.attrs['.id'],
+      name: r.attrs.name,
+      password: r.attrs.password ?? '',
+      service: r.attrs.service || 'pppoe',
+      profile: r.attrs.profile ?? '',
+      comment: r.attrs.comment ?? '',
+      disabled: isTrue(r.attrs.disabled),
+    }));
+}
+
+export async function listProfiles(client: RouterOsClient): Promise<ProfileRow[]> {
+  const rows = await client.talk([
+    '/ppp/profile/print',
+    '=.proplist=name,rate-limit,local-address,remote-address',
+  ]);
+
+  return rows
+    .filter((r) => r.attrs.name)
+    .map((r) => ({
+      name: r.attrs.name,
+      rateLimit: r.attrs['rate-limit'] ?? '',
+      localAddress: r.attrs['local-address'] ?? '',
+      remoteAddress: r.attrs['remote-address'] ?? '',
+    }));
+}
+
+/** `=key=value` words for the fields that are actually set. */
+function secretWords(input: SecretInput): string[] {
+  const words = [
+    `=name=${input.name}`,
+    `=password=${input.password}`,
+    `=service=${input.service}`,
+    `=disabled=${input.disabled ? 'yes' : 'no'}`,
+    // Always sent, empty included: the comment is the name of the client on the
+    // line, so a line that changes hands has to lose the previous name — an
+    // omitted word would leave the old subscriber's name on the secret.
+    `=comment=${input.comment ?? ''}`,
+  ];
+  // Profile is the opposite case, and omitted rather than blanked: an empty
+  // profile word would clear the router's own default instead of leaving it
+  // alone. Null here means "the plan does not name one".
+  if (input.profile) words.push(`=profile=${input.profile}`);
+  return words;
+}
+
+/**
+ * Add a secret unconditionally. Returns the RouterOS id.
+ *
+ * RouterOS does **not** enforce unique secret names — `/ppp/secret/add` with a
+ * name that already exists succeeds and leaves the subscriber with two lines.
+ * So this must only be called for a name the caller has just confirmed is
+ * absent; `resolveSecret()` in accounts.ts is the one place that decides, from
+ * a full `listSecrets()` taken in the same session.
+ */
+export async function addSecret(client: RouterOsClient, input: SecretInput): Promise<string> {
+  const created = await client.talk(['/ppp/secret/add', ...secretWords(input)]);
+  const id = created[0]?.attrs.ret;
+  if (!id) throw new RouterOsError(`router did not return an id for "${input.name}"`);
+  return id;
+}
+
+export async function updateSecret(
+  client: RouterOsClient,
+  secretId: string,
+  input: SecretInput,
+): Promise<void> {
+  await client.talk(['/ppp/secret/set', `=.id=${secretId}`, ...secretWords(input)]);
+}
+
+/** Remove a secret and drop the session it may still be holding open. */
+export async function removeSecret(
+  client: RouterOsClient,
+  secretId: string,
+  name: string,
+): Promise<void> {
+  await dropSessions(client, name);
+  await client.talk(['/ppp/secret/remove', `=.id=${secretId}`]);
+}
+
+/** Kick every live session for `pppoeUsername`. Returns how many were dropped. */
+async function dropSessions(client: RouterOsClient, pppoeUsername: string): Promise<number> {
+  const active = await client.talk([
+    '/ppp/active/print',
+    `?name=${pppoeUsername}`,
+    '=.proplist=.id,name',
+  ]);
+
+  let removed = 0;
+  for (const session of active) {
+    if (session.attrs.name !== pppoeUsername || !session.attrs['.id']) continue;
+    await client.talk(['/ppp/active/remove', `=.id=${session.attrs['.id']}`]);
+    removed += 1;
+  }
+  return removed;
 }
 
 /**
@@ -382,48 +524,51 @@ export async function applyLineState(
   client: RouterOsClient,
   pppoeUsername: string,
   connected: boolean,
+  profile?: string | null,
 ): Promise<ApplyResult> {
   const secrets = await client.talk([
     '/ppp/secret/print',
     `?name=${pppoeUsername}`,
-    '=.proplist=.id,name,disabled',
+    '=.proplist=.id,name,disabled,profile',
   ]);
 
   // `?name=` is a filter, but match exactly: RouterOS returns the row set and
   // we must never disable a different client on a near-miss.
   const secret = secrets.find((s) => s.attrs.name === pppoeUsername);
   if (!secret?.attrs['.id']) {
-    return { secretFound: false, secretChanged: false, sessionsRemoved: 0 };
+    return {
+      secretFound: false,
+      secretChanged: false,
+      profileChanged: false,
+      sessionsRemoved: 0,
+    };
   }
 
   const shouldBeDisabled = !connected;
   const isDisabled = isTrue(secret.attrs.disabled);
 
+  // The plan's bandwidth profile is asserted here rather than only at creation,
+  // so moving a client between plans actually changes their speed. A null
+  // profile means the plan does not name one — leave whatever the router has.
+  const wantProfile = profile ?? null;
+  const profileChanged = wantProfile !== null && secret.attrs.profile !== wantProfile;
+
   let secretChanged = false;
-  if (isDisabled !== shouldBeDisabled) {
+  if (isDisabled !== shouldBeDisabled || profileChanged) {
     await client.talk([
       '/ppp/secret/set',
       `=.id=${secret.attrs['.id']}`,
       `=disabled=${shouldBeDisabled ? 'yes' : 'no'}`,
+      ...(profileChanged ? [`=profile=${wantProfile}`] : []),
     ]);
-    secretChanged = true;
+    secretChanged = isDisabled !== shouldBeDisabled;
   }
 
-  let sessionsRemoved = 0;
-  if (!connected) {
-    const active = await client.talk([
-      '/ppp/active/print',
-      `?name=${pppoeUsername}`,
-      '=.proplist=.id,name',
-    ]);
-    for (const session of active) {
-      if (session.attrs.name !== pppoeUsername || !session.attrs['.id']) continue;
-      await client.talk(['/ppp/active/remove', `=.id=${session.attrs['.id']}`]);
-      sessionsRemoved += 1;
-    }
-  }
+  // Disabling alone leaves the current session up until it happens to re-dial,
+  // so the subscriber would stay online for hours after being cut off.
+  const sessionsRemoved = connected ? 0 : await dropSessions(client, pppoeUsername);
 
-  return { secretFound: true, secretChanged, sessionsRemoved };
+  return { secretFound: true, secretChanged, profileChanged, sessionsRemoved };
 }
 
 /** Connectivity/credential check — also reports the firmware version. */

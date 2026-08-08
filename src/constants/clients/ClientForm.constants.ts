@@ -17,3 +17,6 @@ export const DEFAULT_PLAN_DURATION_DAYS = 30;
 
 export const NO_ROOM_LABEL = 'No room';
 export const NO_PLAN_LABEL = 'No plan';
+
+/** Stands in for pppoe_username wherever a client has no line assigned yet. */
+export const NO_ACCOUNT_LABEL = 'No PPPoE account';

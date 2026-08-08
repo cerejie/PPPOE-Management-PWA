@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import * as styles from '@/styles/common/layout/TabBar.css';
+import { PPPOE_PATH } from '@/constants/pppoe/PppoeAccounts.constants';
 
 interface Tab {
   to: string;
@@ -51,13 +52,16 @@ const tabs: Tab[] = [
     ),
   },
   {
-    to: '/plans',
-    label: 'Plans',
+    // Plans moved to Settings → Manage: they are configured once and rarely
+    // revisited, while PPPoE accounts are worked with daily.
+    to: PPPOE_PATH,
+    label: 'PPPoE',
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden>
-        <rect {...strokeProps} x="2.5" y="5.5" width="19" height="13" rx="3" />
-        <path {...strokeProps} d="M2.5 10h19" />
-        <path {...strokeProps} d="M6.5 14.5h3" />
+        <circle {...strokeProps} cx="8" cy="12" r="4" />
+        <path {...strokeProps} d="M12 12h9" />
+        <path {...strokeProps} d="M17 12v3.5" />
+        <path {...strokeProps} d="M20.5 12v3.5" />
       </svg>
     ),
   },

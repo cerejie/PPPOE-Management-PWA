@@ -8,7 +8,10 @@ export const bar = style({
   gap: '0.5rem',
   overflowX: 'auto',
   paddingBottom: '0.25rem',
+  // Hidden in both engines: WebKit ignores scrollbar-width, and an overlay rail
+  // here reads as a second scrollbar beside the page's own.
   scrollbarWidth: 'none',
+  selectors: { '&::-webkit-scrollbar': { display: 'none' } },
 });
 
 const chipBase = style({

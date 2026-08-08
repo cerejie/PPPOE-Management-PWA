@@ -28,6 +28,7 @@ export type EntityTable =
   | 'rooms'
   | 'routers'
   | 'plans'
+  | 'pppoe_accounts'
   | 'payments'
   | 'connection_events'
   | 'pause_events'

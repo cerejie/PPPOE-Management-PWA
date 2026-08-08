@@ -12,7 +12,17 @@ export type LedgerKind = 'payment' | 'connection' | 'pause';
 export interface Client {
   readonly id: string;
   full_name: string;
-  pppoe_username: string;
+  /**
+   * The PPPoE line this client is on. 1:1 — an account belongs to at most one
+   * client — and the only half the app writes.
+   */
+  pppoe_account_id: string | null;
+  /**
+   * Name of that account, maintained by a DB trigger (migration 0009) so search,
+   * the ledger PDF and the router sweep keep resolving a client to a line
+   * without a join. Read-only: assign the account, never this.
+   */
+  pppoe_username: string | null;
   room_id: string | null;
   router_id: string | null;
   plan_id: string | null;

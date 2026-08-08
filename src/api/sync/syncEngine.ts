@@ -5,6 +5,7 @@ import { supabase } from '@/api/common/supabaseClient';
 import { pushRouterState } from '@/api/sync/routerBridge';
 import type { Client, ConnectionEvent, PauseEvent } from '@/types/clients/Clients.types';
 import type { Payment } from '@/types/payments/Payments.types';
+import type { PppoeAccount, PppoeProfile } from '@/types/pppoe/Pppoe.types';
 import { isClientEvent } from '@/types/sync/Sync.types';
 import type {
   EntityTable,
@@ -28,12 +29,14 @@ export async function pullAll(): Promise<boolean> {
   try {
     const paymentsSince = new Date(Date.now() - SIX_MONTHS_MS).toISOString();
 
-    const [clients, rooms, routers, plans, payments, events, pauses, users] =
+    const [clients, rooms, routers, plans, accounts, profiles, payments, events, pauses, users] =
       await Promise.all([
         supabase.from('clients').select('*').is('deleted_at', null),
         supabase.from('rooms').select('*').is('deleted_at', null),
         supabase.from('routers').select('*').is('deleted_at', null),
         supabase.from('plans').select('*').is('deleted_at', null),
+        supabase.from('pppoe_accounts').select('*').is('deleted_at', null),
+        supabase.from('pppoe_profiles').select('*'),
         supabase.from('payments').select('*').gte('paid_at', paymentsSince),
         supabase
           .from('connection_events')
@@ -50,12 +53,13 @@ export async function pullAll(): Promise<boolean> {
 
     const anyError =
       clients.error ?? rooms.error ?? routers.error ?? plans.error ??
+      accounts.error ?? profiles.error ??
       payments.error ?? events.error ?? pauses.error ?? users.error;
     if (anyError) throw anyError;
 
     await db.transaction(
       'rw',
-      [db.clients, db.rooms, db.routers, db.plans, db.payments, db.connection_events, db.pause_events, db.app_users, db.sync_meta],
+      [db.clients, db.rooms, db.routers, db.plans, db.pppoe_accounts, db.pppoe_profiles, db.payments, db.connection_events, db.pause_events, db.app_users, db.sync_meta],
       async () => {
         // Replace-all mirror: server is the source of truth for these tables.
         await db.clients.clear();
@@ -66,6 +70,10 @@ export async function pullAll(): Promise<boolean> {
         await db.routers.bulkPut(routers.data ?? []);
         await db.plans.clear();
         await db.plans.bulkPut(plans.data ?? []);
+        await db.pppoe_accounts.clear();
+        await db.pppoe_accounts.bulkPut((accounts.data ?? []) as PppoeAccount[]);
+        await db.pppoe_profiles.clear();
+        await db.pppoe_profiles.bulkPut((profiles.data ?? []) as PppoeProfile[]);
         await db.payments.clear();
         await db.payments.bulkPut((payments.data ?? []) as Payment[]);
         await db.connection_events.clear();
@@ -99,24 +107,24 @@ export async function flushOutbox(): Promise<{ flushed: number; failed: number }
 
   let flushed = 0;
   let failed = 0;
-  let connectionEventsFlushed = false;
+  let routerWorkFlushed = false;
 
   for (const item of items) {
     const ok = await pushOutboxItem(item);
     if (ok) {
       await db.outbox.delete(item.client_uuid);
       flushed += 1;
-      if (item.kind === 'connection_event') connectionEventsFlushed = true;
+      if (touchesRouter(item)) routerWorkFlushed = true;
     } else {
       failed += 1;
     }
   }
 
-  if (connectionEventsFlushed) {
-    // Now that the events exist server-side, have the Edge Function assert the
-    // state on the MikroTik. Before pullAll, so the executed_on_router flag it
-    // sets is picked up by the same pull. Best-effort: a failure leaves the
-    // events unexecuted for the scheduled sweep to retry.
+  if (routerWorkFlushed) {
+    // Now that the rows exist server-side, have the Edge Function assert them
+    // on the MikroTik. Before pullAll, so the executed_on_router /
+    // synced_to_router flags it sets are picked up by the same pull.
+    // Best-effort: a failure leaves the work pending for the scheduled sweep.
     await pushRouterState();
   }
 
@@ -126,6 +134,18 @@ export async function flushOutbox(): Promise<{ flushed: number; failed: number }
   }
 
   return { flushed, failed };
+}
+
+/**
+ * Whether flushing this item leaves work for the router sweep.
+ *
+ * A connection event moves a line up or down; a pppoe_accounts write creates,
+ * renames or removes one. Both land in Supabase first and are asserted on the
+ * MikroTik by the same Edge Function pass.
+ */
+function touchesRouter(item: OutboxItem): boolean {
+  if (item.kind === 'connection_event') return true;
+  return item.kind === 'entity_write' && item.payload.table === 'pppoe_accounts';
 }
 
 async function pushOutboxItem(item: OutboxItem): Promise<boolean> {
@@ -197,6 +217,7 @@ const MIRROR_TABLES = [
   db.outbox,
   db.clients,
   db.plans,
+  db.pppoe_accounts,
   db.rooms,
   db.routers,
   db.payments,

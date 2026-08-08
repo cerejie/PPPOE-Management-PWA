@@ -7,8 +7,10 @@ import { ClientDetailPage } from '@/pages/clients/detail/ClientDetailPage';
 import { ClientFormPage } from '@/pages/clients/form/ClientFormPage';
 import { RoomsPage } from '@/pages/rooms/RoomsPage';
 import { PlansPage } from '@/pages/plans/PlansPage';
+import { PppoeAccountsPage } from '@/pages/pppoe/PppoeAccountsPage';
 import { SettingsPage } from '@/pages/settings/SettingsPage';
 import { SyncPage } from '@/pages/sync/SyncPage';
+import { PPPOE_PATH } from '@/constants/pppoe/PppoeAccounts.constants';
 
 export function AppRoutes() {
   return (
@@ -19,6 +21,7 @@ export function AppRoutes() {
         <Route path="/clients/:id" element={<ClientDetailPage />} />
         <Route path="/rooms" element={<RoomsPage />} />
         <Route path="/plans" element={<PlansPage />} />
+        <Route path={PPPOE_PATH} element={<PppoeAccountsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/sync" element={<SyncPage />} />
         <Route element={<SuperAdminRoute />}>
